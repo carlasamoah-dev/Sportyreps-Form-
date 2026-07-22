@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sportyreps - Football Talent Application</title>
+  
+  <!-- CSS Stylesheet -->
+  <link rel="stylesheet" href="styles.css">
+  
+  <!-- Favicons (Clean fallback icon) -->
+  <link rel="icon" type="image/png" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚽</text></svg>">
+</head>
+<body>
+
+  <!-- Full-screen background overlay across the entire form -->
+  <div class="app-bg-overlay"></div>
+
+  <!-- Top Progress Bar Container -->
+  <div class="progress-container" aria-label="Form completion progress">
+    <div id="progress-bar" class="progress-bar" style="width: 0%;"></div>
+  </div>
+
+  <!-- Main Active Form Slide Mount Point -->
+  <main id="main-content" class="main-content">
+    <div id="form-container" class="form-container">
+      <!-- Loaded dynamically by app.js -->
+    </div>
+  </main>
+
+  <!-- Navigation Control Buttons Footer -->
+  <footer class="app-footer">
+    <div class="navigation-controls">
+      <button id="prev-btn" class="nav-btn" aria-label="Previous question" disabled>
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 16 16">
+          <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 13L5 8l5-5"/>
+        </svg>
+      </button>
+      <button id="next-btn" class="nav-btn" aria-label="Next question">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 16 16">
+          <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 3l5 5-5 5"/>
+        </svg>
+      </button>
+    </div>
+    <div class="power-tag">
+      Powered by <a href="https://www.instagram.com/sportyreps_/" target="_blank" rel="noopener noreferrer">Sportyreps</a>
+    </div>
+  </footer>
+
+  <!-- Configurations and Code scripts -->
+  <script src="forms_config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
