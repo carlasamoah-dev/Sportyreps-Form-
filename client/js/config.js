@@ -1,4 +1,4 @@
-const FORMS = {
+export const FORMS = {
   "football-talent": {
     title: "Football Talent application",
     steps: [
@@ -373,7 +373,3 @@ const FORMS = {
     }
   }
 };
-
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = { FORMS };
-}
