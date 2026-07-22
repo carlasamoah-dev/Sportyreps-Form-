@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sportyreps Admin Panel</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/components.css">
+</head>
+<body>
+
+  <!-- Login Overlay -->
+  <div id="login-overlay" class="login-overlay active">
+    <div class="login-box">
+      <h2>Admin Login</h2>
+      <p>Enter the admin password to view submissions.</p>
+      <input type="password" id="admin-password" placeholder="Password (hint: admin123)" />
+      <div id="login-error" class="error-text"></div>
+      <button id="login-btn" class="btn-primary">Login</button>
+    </div>
+  </div>
+
+  <!-- Main Dashboard (Hidden until login) -->
+  <div id="dashboard" class="dashboard hidden">
+    <!-- Top Navigation / Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <span class="logo-icon">⚽</span>
+        <span class="brand-name">Sportyreps Admin</span>
+      </div>
+      <div class="header-right">
+        <button id="logout-btn" class="btn-secondary">Logout</button>
+      </div>
+    </header>
+
+    <!-- Tab Navigation -->
+    <nav class="tab-nav">
+      <button class="tab-btn active" data-target="responses-view">Responses [<span id="response-count">0</span>]</button>
+      <button class="tab-btn" data-target="summary-view">Summary & Insights</button>
+    </nav>
+
+    <!-- Responses Data Grid View -->
+    <main id="responses-view" class="view-panel active">
+      <div class="table-toolbar">
+        <div class="toolbar-left">
+          <input type="text" id="search-input" class="search-input" placeholder="Search by name or email..." />
+        </div>
+        <div class="toolbar-right">
+          <button id="column-settings-btn" class="btn-secondary">⚙️ Columns</button>
+        </div>
+      </div>
+      
+      <div class="table-wrapper">
+        <table id="data-grid" class="data-grid">
+          <thead id="grid-head"></thead>
+          <tbody id="grid-body"></tbody>
+        </table>
+      </div>
+    </main>
+
+    <!-- Summary & Insights View -->
+    <main id="summary-view" class="view-panel hidden">
+      <div class="summary-container" id="summary-container">
+        <!-- Rendered by summary.js -->
+      </div>
+    </main>
+  </div>
+
+  <!-- Column Settings Popover -->
+  <div id="column-popover" class="column-popover hidden">
+    <div class="popover-header">
+      <h3>Column settings</h3>
+      <button id="close-popover" class="close-btn">&times;</button>
+    </div>
+    <div class="popover-body" id="column-list">
+      <!-- Rendered by columnSettings.js -->
+    </div>
+    <div class="popover-footer">
+      <button id="save-columns-btn" class="btn-primary">Apply</button>
+    </div>
+  </div>
+
+  <!-- File Preview Modal -->
+  <div id="preview-modal" class="modal-overlay hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modal-title">Attachment Preview</h3>
+        <button id="close-modal" class="close-btn">&times;</button>
+      </div>
+      <div class="modal-body" id="modal-body">
+        <!-- Rendered by previewModal.js -->
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
