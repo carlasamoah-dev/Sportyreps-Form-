@@ -26,26 +26,33 @@ export function validateStep(step) {
     
     step.fields.forEach(f => {
       const inputEl = document.getElementById(f.name);
-      const val = inputEl ? inputEl.value.trim() : "";
+      
+      let val = "";
+      if (inputEl) {
+        // Use full international format if intl-tel-input is attached and valid
+        if (f.isPhone && inputEl.iti && inputEl.iti.isValidNumber()) {
+          val = inputEl.iti.getNumber();
+        } else if (f.isPhone && inputEl.iti) {
+          // If invalid but they typed something, get what they typed (will fail validation if needed)
+          val = inputEl.value.trim() ? inputEl.iti.getNumber() : "";
+        } else {
+          val = inputEl.value.trim();
+        }
+      }
       
       if (f.required && !val) {
         isValid = false;
         if (inputEl) {
-          if (f.isPhone) {
-            const wrapper = inputEl.closest(".phone-input-wrapper");
-            if (wrapper) wrapper.style.borderBottomColor = "var(--error-color)";
-          } else {
-            inputEl.style.borderBottomColor = "var(--error-color)";
-          }
+          inputEl.style.borderBottomColor = "var(--error-color)";
+          // Also highlight intl-tel-input wrapper if it exists
+          const itiContainer = inputEl.closest(".iti");
+          if (itiContainer) itiContainer.style.borderBottom = "2px solid var(--error-color)";
         }
       } else {
         if (inputEl) {
-          if (f.isPhone) {
-            const wrapper = inputEl.closest(".phone-input-wrapper");
-            if (wrapper) wrapper.style.borderBottomColor = "var(--border-color)";
-          } else {
-            inputEl.style.borderBottomColor = "var(--border-color)";
-          }
+          inputEl.style.borderBottomColor = "var(--border-color)";
+          const itiContainer = inputEl.closest(".iti");
+          if (itiContainer) itiContainer.style.borderBottom = "none";
         }
         contactData[f.name] = val;
       }
@@ -54,6 +61,16 @@ export function validateStep(step) {
         isValid = false;
         if (inputEl) inputEl.style.borderBottomColor = "var(--error-color)";
         showError(errorContainer, "Please enter a valid email address.");
+      }
+      
+      if (f.isPhone && val && inputEl && inputEl.iti && !inputEl.iti.isValidNumber()) {
+        isValid = false;
+        if (inputEl) {
+          inputEl.style.borderBottomColor = "var(--error-color)";
+          const itiContainer = inputEl.closest(".iti");
+          if (itiContainer) itiContainer.style.borderBottom = "2px solid var(--error-color)";
+        }
+        showError(errorContainer, "Please enter a valid phone number.");
       }
     });
 

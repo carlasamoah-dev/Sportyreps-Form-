@@ -1,46 +1,46 @@
 import { fetchSubmissions } from './api.js';
 import { state } from './state.js';
-import { initLogin } from './components/login.js';
-import { initTable, renderTable } from './components/table.js';
-import { initColumnSettings } from './components/columnSettings.js';
-import { renderSummary } from './components/summary.js';
-import { initPreviewModal } from './components/previewModal.js';
+import { renderTable } from './render.js';
+import { renderSummary } from './summary.js';
+import { setupGlobalListeners } from './events.js';
+import { getSession } from './auth.js';
 
-async function bootstrap() {
-  initLogin();
-  initColumnSettings();
-  initTable();
-  initPreviewModal();
-
-  // Handle Tab Switching
-  const tabs = document.querySelectorAll(".tab-btn");
-  const views = document.querySelectorAll(".view-panel");
-
-  tabs.forEach(tab => {
-    tab.addEventListener("click", () => {
-      // Deactivate all
-      tabs.forEach(t => t.classList.remove("active"));
-      views.forEach(v => v.classList.remove("active", "hidden")); // remove active, will add hidden
-      views.forEach(v => v.classList.add("hidden"));
-
-      // Activate clicked
-      tab.classList.add("active");
-      document.getElementById(tab.getAttribute("data-target")).classList.remove("hidden");
-      document.getElementById(tab.getAttribute("data-target")).classList.add("active");
-    });
-  });
-
-  // Fetch data
+export async function loadDataAndRender() {
   try {
     const data = await fetchSubmissions();
     state.submissions = data;
     state.filteredSubmissions = data;
-    
-    // Initial renders
     renderTable();
     renderSummary();
   } catch (error) {
-    console.error("Failed to load submissions:", error);
+    if (error.message === 'SESSION_EXPIRED') {
+      // Show login overlay if session is missing/expired
+      state.isLoginActive = true;
+      document.getElementById("login-overlay")?.classList.add("active");
+      document.getElementById("dashboard")?.classList.add("hidden");
+    } else {
+      console.error("Failed to load submissions:", error);
+    }
+  }
+}
+
+async function bootstrap() {
+  setupGlobalListeners();
+
+  const session = await getSession();
+  
+  if (session) {
+    // If we have a valid session, hide login and fetch data immediately
+    state.isLoginActive = false;
+    document.getElementById("login-overlay")?.classList.remove("active");
+    document.getElementById("dashboard")?.classList.remove("hidden");
+    
+    await loadDataAndRender();
+  } else {
+    // Show login overlay by default
+    state.isLoginActive = true;
+    document.getElementById("login-overlay")?.classList.add("active");
+    document.getElementById("dashboard")?.classList.add("hidden");
   }
 }
 

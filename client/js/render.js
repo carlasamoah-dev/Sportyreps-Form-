@@ -157,15 +157,7 @@ function renderContactInfo(step) {
     let inputMarkup = "";
     if (f.isPhone) {
       inputMarkup = `
-        <div class="phone-input-wrapper">
-          <div class="phone-flag-selector" id="flag-select">
-            <span>🇬🇧</span>
-            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="6" fill="none" viewBox="0 0 10 6">
-              <path stroke="#5e6472" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M1 1l4 4 4-4"/>
-            </svg>
-          </div>
-          <input type="tel" id="${f.name}" name="${f.name}" class="contact-input" value="${val}" placeholder="07400 123456" ${f.required ? 'required' : ''}>
-        </div>
+        <input type="tel" id="${f.name}" name="${f.name}" class="contact-input iti-phone-input" value="${val}" ${f.required ? 'required' : ''}>
       `;
     } else {
       inputMarkup = `
@@ -294,6 +286,6 @@ export function renderEnding(endingId) {
   formContainer.appendChild(slide);
 
   if (endingId === "ending-success") {
-    console.log("FINAL SUBMISSION DATA:", state.answers);
+    // Logging removed for production
   }
 }

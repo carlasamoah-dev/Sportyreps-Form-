@@ -1,22 +1,19 @@
 const express = require('express');
-const { handleSubmission } = require('../controllers/submission.controller');
+const { handleSubmission, getSubmissions } = require('../controllers/submission.controller');
 const upload = require('../middlewares/upload.middleware');
 const validate = require('../middlewares/validate.middleware');
+const requireAuth = require('../middlewares/auth.middleware');
 const { submissionSchema } = require('../validators/submission.validator');
 
 const router = express.Router();
 
-// The fields array should match all possible file upload fields
-const fileFields = [
-  { name: 'cv-upload', maxCount: 1 },
-  { name: 'photo-portrait', maxCount: 1 },
-  { name: 'photo-front', maxCount: 1 },
-  { name: 'photo-rear', maxCount: 1 }
-];
+// GET /api/submissions — Admin panel reads all submissions (PROTECTED: requires login)
+router.get('/', requireAuth, getSubmissions);
 
+// POST /api/submissions — Client submits a new form entry (PUBLIC: no auth needed)
 router.post(
   '/',
-  upload.any(), // Accept any files, we manually filter in controller to allow dynamic FormData
+  upload.any(),
   validate(submissionSchema),
   handleSubmission
 );

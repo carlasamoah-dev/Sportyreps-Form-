@@ -32,6 +32,25 @@ export function bindEvents(slide, step) {
     });
   }
 
+  // Initialize intl-tel-input for any phone fields in this slide
+  const phoneInputs = slide.querySelectorAll(".iti-phone-input");
+  phoneInputs.forEach(input => {
+    // Check if intlTelInput is loaded globally
+    if (window.intlTelInput) {
+      input.iti = window.intlTelInput(input, {
+        initialCountry: "auto",
+        geoIpLookup: function(callback) {
+          fetch("https://ipapi.co/json")
+            .then(res => res.json())
+            .then(data => callback(data.country_code))
+            .catch(() => callback("gb"));
+        },
+        utilsScript: "https://cdn.jsdelivr.net/npm/intl-tel-input@23.0.1/build/js/utils.js",
+        separateDialCode: true,
+      });
+    }
+  });
+
   const inputField = slide.querySelector("#input-field");
   if (inputField) {
     inputField.addEventListener("keydown", (e) => {

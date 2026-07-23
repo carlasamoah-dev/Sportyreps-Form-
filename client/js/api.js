@@ -40,7 +40,7 @@ export function submitForm() {
     showSuccess();
   }
 
-  console.log("SUBMITTING DATA:", finalPayload);
+  // Logging removed for production
 
   if (BACKEND_URL) {
     fetch(BACKEND_URL, {

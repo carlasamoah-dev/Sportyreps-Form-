@@ -652,3 +652,22 @@ body {
   25% { transform: translateX(-4px); }
   75% { transform: translateX(4px); }
 }
+
+/* --- intl-tel-input Overrides --- */
+.iti {
+  width: 100%;
+  display: block;
+}
+.iti__flag-container {
+  padding: 10px 0;
+}
+.iti__selected-flag {
+  border-radius: 4px 0 0 4px;
+}
+.iti__country-list {
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(0,0,0,0.1);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
