@@ -514,3 +514,47 @@ input[type="checkbox"] {
   height: 100%;
   border: none;
 }
+
+/* Filter Popover */
+.filter-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 340px;
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+  padding: 16px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.filter-select {
+  flex: 1;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border-dark);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 13.5px;
+  color: var(--text-primary);
+  background: white;
+  outline: none;
+  cursor: pointer;
+}
+.filter-select:focus {
+  border-color: var(--primary);
+}
+.filter-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+}

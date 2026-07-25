@@ -69,7 +69,6 @@ export function setupGlobalListeners() {
   // Filter State
   let currentSearch = "";
   let currentTimeFilter = "all"; // 'all', '7days', '30days'
-  let currentRoleFilter = "all"; // 'all', 'talent', 'rep'
 
   const applyFilters = () => {
     let filtered = state.submissions;
@@ -88,17 +87,43 @@ export function setupGlobalListeners() {
       });
     }
 
-    // 2. Role Filter
-    if (currentRoleFilter !== "all") {
-      const targetRole = currentRoleFilter === "talent" ? "Talent" : "Representative";
-      filtered = filtered.filter(row => row.role === targetRole);
+    // 2. Dynamic Column Filters
+    if (state.activeFilters && state.activeFilters.length > 0) {
+      state.activeFilters.forEach(filter => {
+        filtered = filtered.filter(row => {
+          let val = row[filter.column];
+          if (val === undefined || val === null) val = '';
+          val = String(val).trim();
+          
+          if (filter.condition === 'empty') return val === '' || val === '–';
+          if (filter.condition === 'not_empty') return val !== '' && val !== '–';
+          
+          if (filter.condition === 'any_of' || filter.condition === 'contains') {
+            if (!filter.value) return true;
+            return val.toLowerCase().includes(filter.value.toLowerCase());
+          }
+          if (filter.condition === 'none_of' || filter.condition === 'not_contains') {
+            if (!filter.value) return true;
+            return !val.toLowerCase().includes(filter.value.toLowerCase());
+          }
+          if (filter.condition === 'is') {
+            if (!filter.value) return true;
+            return val.toLowerCase() === filter.value.toLowerCase();
+          }
+          if (filter.condition === 'is_not') {
+            if (!filter.value) return true;
+            return val.toLowerCase() !== filter.value.toLowerCase();
+          }
+          return true;
+        });
+      });
     }
 
     // 3. Search Query
     if (currentSearch) {
       const q = currentSearch.toLowerCase();
       filtered = filtered.filter(row => {
-        return Object.values(row).some(v => String(v).toLowerCase().includes(q));
+        return Object.values(row).some(v => String(v) && String(v).toLowerCase().includes(q));
       });
     }
 
@@ -130,21 +155,240 @@ export function setupGlobalListeners() {
     applyFilters();
   });
 
-  // Role Filter Button (cycles through options)
-  const roleBtn = document.getElementById("role-filter-btn");
-  const roleLabel = document.getElementById("role-filter-label");
-  roleBtn?.addEventListener("click", () => {
-    if (currentRoleFilter === "all") {
-      currentRoleFilter = "talent";
-      roleLabel.textContent = "Role: Talent";
-    } else if (currentRoleFilter === "talent") {
-      currentRoleFilter = "rep";
-      roleLabel.textContent = "Role: Reps";
+  // Dynamic Filter Popover Logic
+  const filtersBtn = document.getElementById("filters-btn");
+  const filterPopover = document.getElementById("filter-popover");
+  const closeFilterBtn = document.getElementById("close-filter-btn");
+  const filtersContainer = document.getElementById("filters-container");
+  const addFilterBtn = document.getElementById("add-filter-btn");
+  const applyFilterBtn = document.getElementById("filter-apply-btn");
+  const cancelFilterBtn = document.getElementById("filter-cancel-btn");
+  const clearFilterBtn = document.getElementById("filter-clear-btn");
+
+  let editingFilters = [];
+
+  const getConds = (type) => {
+    if (type === 'choice') {
+      return [
+        {v: 'any_of', l: 'Is any of'},
+        {v: 'none_of', l: 'Is none of'},
+        {v: 'not_empty', l: 'Is not empty'},
+        {v: 'empty', l: 'Is empty'}
+      ];
     } else {
-      currentRoleFilter = "all";
-      roleLabel.textContent = "All Roles";
+      return [
+        {v: 'contains', l: 'Contains'},
+        {v: 'not_contains', l: 'Does not contain'},
+        {v: 'is', l: 'Is'},
+        {v: 'is_not', l: 'Is not'},
+        {v: 'not_empty', l: 'Is not empty'},
+        {v: 'empty', l: 'Is empty'}
+      ];
     }
+  };
+
+  const renderFiltersList = () => {
+    if (!filtersContainer) return;
+    filtersContainer.innerHTML = '';
+    
+    editingFilters.forEach((filter, index) => {
+      let col = state.columns.find(c => c.id === filter.column);
+      if (!col) {
+        col = state.columns[1];
+        filter.column = col.id;
+      }
+      const isChoice = col.filterType === 'choice';
+      
+      const rowDiv = document.createElement("div");
+      rowDiv.style.display = "flex";
+      rowDiv.style.alignItems = "center";
+      rowDiv.style.gap = "8px";
+      
+      // Column Select
+      const colSelect = document.createElement("select");
+      colSelect.className = "filter-select";
+      colSelect.style.width = "30%";
+      state.columns.forEach(c => {
+        const opt = document.createElement("option");
+        opt.value = c.id;
+        opt.textContent = c.label;
+        colSelect.appendChild(opt);
+      });
+      colSelect.value = filter.column;
+      
+      // Condition Select
+      const condSelect = document.createElement("select");
+      condSelect.className = "filter-select";
+      condSelect.style.width = "30%";
+      
+      const conds = getConds(col.filterType);
+      conds.forEach(c => {
+        const opt = document.createElement("option");
+        opt.value = c.v;
+        opt.textContent = c.l;
+        condSelect.appendChild(opt);
+      });
+      if (!conds.some(c => c.v === filter.condition)) {
+         filter.condition = conds[0].v;
+      }
+      condSelect.value = filter.condition;
+      
+      // Value input/select
+      let valInput;
+      if (filter.condition !== 'empty' && filter.condition !== 'not_empty') {
+          if (isChoice) {
+            valInput = document.createElement("select");
+            valInput.className = "filter-select";
+            valInput.style.flex = "1";
+            
+            const emptyOpt = document.createElement("option");
+            emptyOpt.value = "";
+            emptyOpt.textContent = "Select a value...";
+            valInput.appendChild(emptyOpt);
+            
+            if (col.choices && col.choices.length > 0) {
+              col.choices.forEach(val => {
+                const opt = document.createElement("option");
+                opt.value = val;
+                opt.textContent = val;
+                valInput.appendChild(opt);
+              });
+            } else {
+              const uniqueVals = new Set();
+              state.submissions.forEach(row => {
+                let v = row[col.id];
+                if (v !== undefined && v !== null && v !== '') {
+                  String(v).split(',').forEach(vv => {
+                    if (vv.trim() && vv.trim() !== '–') uniqueVals.add(vv.trim());
+                  });
+                }
+              });
+              Array.from(uniqueVals).sort().forEach(val => {
+                const opt = document.createElement("option");
+                opt.value = val;
+                opt.textContent = val;
+                valInput.appendChild(opt);
+              });
+            }
+            valInput.value = filter.value || '';
+          } else {
+            valInput = document.createElement("input");
+            valInput.type = "text";
+            valInput.className = "filter-select";
+            valInput.placeholder = "Enter value...";
+            valInput.style.flex = "1";
+            valInput.value = filter.value || '';
+          }
+      } else {
+          valInput = document.createElement("div");
+          valInput.style.flex = "1"; // placeholder
+      }
+
+      // Remove button
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "btn-text";
+      removeBtn.style.padding = "4px";
+      removeBtn.style.color = "var(--text-muted)";
+      removeBtn.style.fontSize = "16px";
+      removeBtn.innerHTML = "×";
+      removeBtn.onclick = (e) => {
+        e.stopPropagation();
+        editingFilters.splice(index, 1);
+        renderFiltersList();
+      };
+      
+      // Event Listeners
+      colSelect.addEventListener("change", (e) => {
+        filter.column = e.target.value;
+        const newCol = state.columns.find(c => c.id === filter.column);
+        filter.condition = newCol.filterType === 'choice' ? 'any_of' : 'contains';
+        filter.value = '';
+        renderFiltersList();
+      });
+      
+      condSelect.addEventListener("change", (e) => {
+        filter.condition = e.target.value;
+        renderFiltersList();
+      });
+      
+      if (valInput.tagName === "SELECT" || valInput.tagName === "INPUT") {
+          valInput.addEventListener("input", (e) => {
+            filter.value = e.target.value;
+          });
+      }
+      
+      rowDiv.appendChild(colSelect);
+      rowDiv.appendChild(condSelect);
+      rowDiv.appendChild(valInput);
+      rowDiv.appendChild(removeBtn);
+      
+      filtersContainer.appendChild(rowDiv);
+    });
+  };
+
+  filtersBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    
+    // Copy active filters into editing state
+    editingFilters = state.activeFilters ? state.activeFilters.map(f => ({...f})) : [];
+    if (editingFilters.length === 0) {
+      editingFilters.push({ column: state.columns[1].id, condition: 'any_of', value: '' });
+    }
+    
+    renderFiltersList();
+    filterPopover.classList.toggle("hidden");
+  });
+
+  addFilterBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    editingFilters.push({ column: state.columns[1].id, condition: 'any_of', value: '' });
+    renderFiltersList();
+  });
+
+  filterPopover?.addEventListener("click", (e) => {
+    e.stopPropagation();
+  });
+
+  document.addEventListener("click", (e) => {
+    if (filterPopover && !filterPopover.classList.contains("hidden") && !filterPopover.contains(e.target) && e.target !== filtersBtn && !filtersBtn.contains(e.target)) {
+      filterPopover.classList.add("hidden");
+    }
+  });
+
+  closeFilterBtn?.addEventListener("click", () => filterPopover.classList.add("hidden"));
+  cancelFilterBtn?.addEventListener("click", () => filterPopover.classList.add("hidden"));
+
+  applyFilterBtn?.addEventListener("click", () => {
+    // Filter out invalid ones (empty value for condition that requires it)
+    state.activeFilters = editingFilters.filter(f => {
+      if (f.condition !== 'empty' && f.condition !== 'not_empty' && !f.value) return false;
+      return true;
+    });
+
+    if (state.activeFilters.length === 0) {
+        filtersBtn.style.color = "var(--text-muted)";
+        filtersBtn.style.borderColor = "var(--border-dark)";
+        filtersBtn.style.background = "white";
+    } else {
+        filtersBtn.style.color = "var(--primary)";
+        filtersBtn.style.borderColor = "var(--primary-border)";
+        filtersBtn.style.background = "var(--primary-light)";
+    }
+
     applyFilters();
+    filterPopover.classList.add("hidden");
+  });
+
+  clearFilterBtn?.addEventListener("click", () => {
+    state.activeFilters = [];
+    editingFilters = [];
+    
+    filtersBtn.style.color = "var(--text-muted)";
+    filtersBtn.style.borderColor = "var(--border-dark)";
+    filtersBtn.style.background = "white";
+
+    applyFilters();
+    filterPopover.classList.add("hidden");
   });
 
   // Column Settings Drawer

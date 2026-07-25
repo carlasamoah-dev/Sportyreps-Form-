@@ -26,15 +26,16 @@ export function renderTable() {
   
   visibleCols.forEach(col => {
     let svgIcon = SVGS.text;
-    let bg = 'var(--bg-subtle)';
-    let color = 'var(--text-muted)';
+    let bg = '#f3effc'; // Purple for list/text
+    let color = '#7c3aed';
 
-    if (col.type === 'time')   { svgIcon = SVGS.time;   bg = '#fde2e4'; color = '#d1495b'; }
-    if (col.type === 'phone')  { svgIcon = SVGS.phone;  bg = '#fde2e4'; color = '#d1495b'; }
-    if (col.type === 'file')   { svgIcon = SVGS.file;   bg = '#f3effc'; color = '#7c3aed'; }
+    if (col.type === 'time')   { svgIcon = SVGS.time;   bg = '#e7f6ee'; color = '#12805c'; } // Green calendar
+    if (col.type === 'phone')  { svgIcon = SVGS.phone;  bg = 'transparent'; color = '#6b7280'; } // Grey phone (or default text muted)
+    if (col.type === 'file')   { svgIcon = SVGS.file;   bg = '#fffbeb'; color = '#f59e0b'; } // Yellow upload
     if (col.type === 'url')    { svgIcon = SVGS.url;    bg = '#e0f2fe'; color = '#0369a1'; }
     if (col.type === 'number') { svgIcon = SVGS.number; bg = '#fef9c3'; color = '#854d0e'; }
-    if (col.type === 'email')  { svgIcon = SVGS.email;  bg = '#fde2e4'; color = '#d1495b'; }
+    if (col.type === 'email')  { svgIcon = SVGS.email;  bg = '#fde2e4'; color = '#d1495b'; } // Red envelope
+    if (col.type === 'boolean') { svgIcon = SVGS.boolean; bg = '#f3f4f6'; color = '#9ca3af'; } // Grey crossed circle
 
     headHtml += `<th>
                   <div class="th-content">
