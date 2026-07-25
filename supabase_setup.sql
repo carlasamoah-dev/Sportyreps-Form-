@@ -21,6 +21,14 @@ CREATE TABLE IF NOT EXISTS public.submissions (
     "talent-contact_phone" text,
     "talent-contact_email" text,
     
+    -- Manager Info (Talent)
+    "has-manager" text,
+    "manager-contact_manager_firstname" text,
+    "manager-contact_manager_lastname" text,
+    "manager-contact_manager_phone" text,
+    "manager-contact_manager_email" text,
+
+    
     -- Rep Info
     "rep-type" text,
     "rep-contact_rep_firstname" text,

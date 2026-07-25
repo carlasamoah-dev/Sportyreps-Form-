@@ -8,7 +8,7 @@
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 // Initialise the Supabase client (from CDN UMD bundle on window)
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+export const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /**
  * Attempt to sign in with email + password via Supabase Auth.

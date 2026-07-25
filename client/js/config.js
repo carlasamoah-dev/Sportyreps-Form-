@@ -55,6 +55,29 @@ export const FORMS = {
           { name: "phone", label: "Phone number", type: "tel", required: true, isPhone: true },
           { name: "email", label: "Email", type: "email", required: true }
         ],
+        nextStep: "has-manager"
+      },
+      {
+        id: "has-manager",
+        type: "multiple-choice",
+        question: "Do you have a player manager / Representative?",
+        choices: ["Yes", "No"],
+        required: true,
+        logic: {
+          "Yes": "manager-contact",
+          "No": "cv-upload"
+        }
+      },
+      {
+        id: "manager-contact",
+        type: "contact-info",
+        question: "Manager contact information?",
+        fields: [
+          { name: "manager_firstname", label: "First name", type: "text", required: true },
+          { name: "manager_lastname", label: "Last name", type: "text", required: true },
+          { name: "manager_phone", label: "Phone number", type: "tel", required: true, isPhone: true },
+          { name: "manager_email", label: "Email", type: "email", required: true }
+        ],
         nextStep: "cv-upload"
       },
       {
@@ -124,7 +147,7 @@ export const FORMS = {
         accept: "image/*",
         required: true,
         showSplitLayout: true,
-        image: "assets/talent.png"
+        image: "assets/portrait_view.png"
       },
       {
         id: "photo-front",
@@ -137,7 +160,7 @@ export const FORMS = {
         accept: "image/*",
         required: true,
         showSplitLayout: true,
-        image: "assets/talent.png"
+        image: "assets/full_view.png"
       },
       {
         id: "photo-rear",
@@ -150,7 +173,7 @@ export const FORMS = {
         accept: "image/*",
         required: true,
         showSplitLayout: true,
-        image: "assets/talent.png"
+        image: "assets/rear_view.png"
       },
       {
         id: "sex",

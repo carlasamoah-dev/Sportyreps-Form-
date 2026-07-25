@@ -18,35 +18,42 @@ export const COLUMNS = [
   { id: 'talent-contact_firstname',         label: 'First name',                    type: 'text',   defaultVisible: true },
   { id: 'talent-contact_lastname',          label: 'Last name',                     type: 'text',   defaultVisible: true },
   { id: 'talent-contact_phone',             label: 'Phone number',                  type: 'phone',  defaultVisible: true },
-  { id: 'talent-contact_email',             label: 'Email',                         type: 'text',   defaultVisible: false },
+  { id: 'talent-contact_email',             label: 'Email',                         type: 'text',   defaultVisible: true },
+
+  // ── Manager Info (Talent) ─────────────────────────────────
+  { id: 'has-manager',                      label: 'Has Manager?',                  type: 'text',   defaultVisible: true },
+  { id: 'manager-contact_manager_firstname',label: 'Manager first name',            type: 'text',   defaultVisible: true },
+  { id: 'manager-contact_manager_lastname', label: 'Manager last name',             type: 'text',   defaultVisible: true },
+  { id: 'manager-contact_manager_phone',    label: 'Manager phone number',          type: 'phone',  defaultVisible: true },
+  { id: 'manager-contact_manager_email',    label: 'Manager email',                 type: 'text',   defaultVisible: true },
 
   // ── Representative Info ───────────────────────────────────
-  { id: 'rep-type',                         label: 'Representative type',           type: 'text',   defaultVisible: false },
-  { id: 'rep-contact_rep_firstname',        label: 'Rep first name',                type: 'text',   defaultVisible: false },
-  { id: 'rep-contact_rep_lastname',         label: 'Rep last name',                 type: 'text',   defaultVisible: false },
-  { id: 'rep-contact_rep_phone',            label: 'Rep phone number',              type: 'phone',  defaultVisible: false },
-  { id: 'rep-contact_rep_email',            label: 'Rep email',                     type: 'text',   defaultVisible: false },
+  { id: 'rep-type',                         label: 'Representative type',           type: 'text',   defaultVisible: true },
+  { id: 'rep-contact_rep_firstname',        label: 'Rep first name',                type: 'text',   defaultVisible: true },
+  { id: 'rep-contact_rep_lastname',         label: 'Rep last name',                 type: 'text',   defaultVisible: true },
+  { id: 'rep-contact_rep_phone',            label: 'Rep phone number',              type: 'phone',  defaultVisible: true },
+  { id: 'rep-contact_rep_email',            label: 'Rep email',                     type: 'text',   defaultVisible: true },
 
   // ── Talent Info (filled by rep) ───────────────────────────
-  { id: 'talent-info-for-rep_firstname',    label: 'Talent first name (via rep)',   type: 'text',   defaultVisible: false },
-  { id: 'talent-info-for-rep_lastname',     label: 'Talent last name (via rep)',    type: 'text',   defaultVisible: false },
-  { id: 'talent-info-for-rep_phone',        label: 'Talent phone (via rep)',        type: 'phone',  defaultVisible: false },
-  { id: 'talent-info-for-rep_email',        label: 'Talent email (via rep)',        type: 'text',   defaultVisible: false },
+  { id: 'talent-info-for-rep_firstname',    label: 'Talent first name (via rep)',   type: 'text',   defaultVisible: true },
+  { id: 'talent-info-for-rep_lastname',     label: 'Talent last name (via rep)',    type: 'text',   defaultVisible: true },
+  { id: 'talent-info-for-rep_phone',        label: 'Talent phone (via rep)',        type: 'phone',  defaultVisible: true },
+  { id: 'talent-info-for-rep_email',        label: 'Talent email (via rep)',        type: 'text',   defaultVisible: true },
 
   // ── Files ─────────────────────────────────────────────────
   { id: 'cv-upload_url',                    label: 'CV/Resume',                     type: 'file',   defaultVisible: true },
   { id: 'photo-portrait_url',               label: 'Portrait photo',                type: 'file',   defaultVisible: true },
-  { id: 'photo-front_url',                  label: 'Front view photo',              type: 'file',   defaultVisible: false },
-  { id: 'photo-rear_url',                   label: 'Rear view photo',               type: 'file',   defaultVisible: false },
+  { id: 'photo-front_url',                  label: 'Front view photo',              type: 'file',   defaultVisible: true },
+  { id: 'photo-rear_url',                   label: 'Rear view photo',               type: 'file',   defaultVisible: true },
 
   // ── Personal ──────────────────────────────────────────────
   { id: 'sex',                              label: 'Sex',                           type: 'text',   defaultVisible: true },
   { id: 'residence',                        label: 'Country of residence',          type: 'text',   defaultVisible: true },
-  { id: 'dob',                              label: 'Date of birth',                 type: 'text',   defaultVisible: false },
+  { id: 'dob',                              label: 'Date of birth',                 type: 'text',   defaultVisible: true },
   { id: 'age',                              label: 'Age',                           type: 'number', defaultVisible: true },
-  { id: 'nationality',                      label: 'Nationality',                   type: 'text',   defaultVisible: false },
-  { id: 'dual-nationality-check',           label: 'Dual nationality?',             type: 'text',   defaultVisible: false },
-  { id: 'other-nationality',                label: 'Other nationality',             type: 'text',   defaultVisible: false },
+  { id: 'nationality',                      label: 'Nationality',                   type: 'text',   defaultVisible: true },
+  { id: 'dual-nationality-check',           label: 'Dual nationality?',             type: 'text',   defaultVisible: true },
+  { id: 'other-nationality',                label: 'Other nationality',             type: 'text',   defaultVisible: true },
 
   // ── Football Background ───────────────────────────────────
   { id: 'academy-experience',               label: 'Academy experience?',           type: 'text',   defaultVisible: true },
@@ -58,20 +65,20 @@ export const COLUMNS = [
   { id: 'special-abilities',               label: 'Special abilities',              type: 'text',   defaultVisible: true },
 
   // ── Physical ──────────────────────────────────────────────
-  { id: 'height',                           label: 'Height (ft)',                   type: 'text',   defaultVisible: false },
-  { id: 'weight',                           label: 'Weight (kg)',                   type: 'number', defaultVisible: false },
-  { id: 'speed',                            label: 'Speed (mph)',                   type: 'number', defaultVisible: false },
+  { id: 'height',                           label: 'Height (ft)',                   type: 'text',   defaultVisible: true },
+  { id: 'weight',                           label: 'Weight (kg)',                   type: 'number', defaultVisible: true },
+  { id: 'speed',                            label: 'Speed (mph)',                   type: 'number', defaultVisible: true },
 
   // ── Education & Legal ─────────────────────────────────────
   { id: 'education',                        label: 'Highest education',             type: 'text',   defaultVisible: true },
   { id: 'passport-check',                   label: 'Has passport?',                 type: 'text',   defaultVisible: true },
-  { id: 'passport-expiry',                  label: 'Passport expiry',               type: 'text',   defaultVisible: false },
-  { id: 'travel-experience',                label: 'International travel exp?',     type: 'text',   defaultVisible: false },
-  { id: 'criminal-record',                  label: 'Criminal record?',              type: 'text',   defaultVisible: false },
+  { id: 'passport-expiry',                  label: 'Passport expiry',               type: 'text',   defaultVisible: true },
+  { id: 'travel-experience',                label: 'International travel exp?',     type: 'text',   defaultVisible: true },
+  { id: 'criminal-record',                  label: 'Criminal record?',              type: 'text',   defaultVisible: true },
 
   // ── Medical ───────────────────────────────────────────────
-  { id: 'medical-condition',                label: 'Medical condition?',            type: 'text',   defaultVisible: false },
-  { id: 'surgery-check',                    label: 'Surgery in past 10yr?',         type: 'text',   defaultVisible: false },
+  { id: 'medical-condition',                label: 'Medical condition?',            type: 'text',   defaultVisible: true },
+  { id: 'surgery-check',                    label: 'Surgery in past 10yr?',         type: 'text',   defaultVisible: true },
 
   // ── Media ─────────────────────────────────────────────────
   { id: 'youtube-link',                     label: 'YouTube link',                  type: 'url',    defaultVisible: true },

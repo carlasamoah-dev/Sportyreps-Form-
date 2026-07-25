@@ -24,6 +24,13 @@ const submissionSchema = z.object({
   "talent-contact_phone": phoneSchema,
   "talent-contact_email": z.string().email("Invalid email").optional().or(z.literal('')),
 
+  // New questions for Talent manager
+  "has-manager": z.enum(["Yes", "No"]).optional(),
+  "manager-contact_manager_firstname": z.string().optional(),
+  "manager-contact_manager_lastname": z.string().optional(),
+  "manager-contact_manager_phone": phoneSchema,
+  "manager-contact_manager_email": z.string().email("Invalid email").optional().or(z.literal('')),
+
   // Q5 — Rep type
   "rep-type": z.string().optional(),
 
