@@ -127,9 +127,21 @@ function renderMultipleChoice(step) {
   const savedVal = getAnswer(step.id) || "";
   let choicesHtml = "";
   
+  let isOtherSelected = false;
+  let otherValue = "";
+  if (step.allowOther && savedVal && !step.choices.includes(savedVal)) {
+    isOtherSelected = true;
+    otherValue = savedVal;
+  }
+  
   step.choices.forEach((choice, idx) => {
     const keyLetter = String.fromCharCode(65 + idx);
-    const isSelected = savedVal === choice ? "selected" : "";
+    let isSelected = "";
+    if (choice === "Other" && step.allowOther) {
+       isSelected = (isOtherSelected || savedVal === "Other") ? "selected" : "";
+    } else {
+       isSelected = savedVal === choice ? "selected" : "";
+    }
     choicesHtml += `
       <button class="choice-btn ${isSelected}" data-value="${choice}" data-index="${idx}">
         <span class="choice-key">${keyLetter}</span>
@@ -138,10 +150,23 @@ function renderMultipleChoice(step) {
     `;
   });
 
+  let otherInputHtml = "";
+  if (step.allowOther) {
+    otherInputHtml = `
+      <div id="other-input-container" style="display: ${(isOtherSelected || savedVal === 'Other') ? 'block' : 'none'}; margin-top: 16px;">
+        <div class="input-text-container">
+          <input type="text" id="other-input-field" class="input-field" placeholder="Please specify..." value="${otherValue}" style="color: var(--text-heading); font-weight: 500;">
+        </div>
+        <button class="btn-primary ok-btn" style="margin-top: 8px; margin-left: 34px;">OK</button>
+      </div>
+    `;
+  }
+
   return `
     <div class="choices-list">
       ${choicesHtml}
     </div>
+    ${otherInputHtml}
     <div id="error-container"></div>
   `;
 }

@@ -105,6 +105,12 @@ export function validateStep(step) {
     return false;
   }
 
+  if (step.type === "multiple-choice" && step.allowOther && val === "Other") {
+    showError(errorContainer, "Please specify.");
+    shakeContainer();
+    return false;
+  }
+
   if (step.type === "url" && val && !validateUrl(val)) {
     showError(errorContainer, "Please enter a valid URL.");
     shakeContainer();

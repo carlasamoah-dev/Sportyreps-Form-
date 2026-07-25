@@ -70,9 +70,11 @@ export const FORMS = {
           "Immediate familiy relative",
           "Extended familiy relative",
           "Professional contact",
+          "Player Manager",
           "Friend",
           "Other"
         ],
+        allowOther: true,
         required: true
       },
       {

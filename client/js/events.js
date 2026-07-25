@@ -17,11 +17,43 @@ export function bindEvents(slide, step) {
       btn.classList.add("selected");
       
       const val = btn.getAttribute("data-value");
-      setAnswer(step.id, val);
-      
-      setTimeout(() => goNext(), 300);
+      if (val === "Other" && step.allowOther) {
+        const otherContainer = slide.querySelector("#other-input-container");
+        if (otherContainer) {
+           otherContainer.style.display = "block";
+           const otherInput = otherContainer.querySelector("#other-input-field");
+           if (otherInput) {
+             otherInput.focus();
+             setAnswer(step.id, otherInput.value.trim() || "Other");
+           } else {
+             setAnswer(step.id, "Other");
+           }
+        }
+      } else {
+        const otherContainer = slide.querySelector("#other-input-container");
+        if (otherContainer) otherContainer.style.display = "none";
+        setAnswer(step.id, val);
+        setTimeout(() => goNext(), 300);
+      }
     });
   });
+
+  if (step.allowOther) {
+    const otherInput = slide.querySelector("#other-input-field");
+    if (otherInput) {
+       otherInput.addEventListener("input", (e) => {
+         setAnswer(step.id, e.target.value.trim() || "Other");
+       });
+       otherInput.addEventListener("keydown", (e) => {
+         if (e.key === "Enter") {
+           e.preventDefault();
+           if (validateStep(step)) {
+             goNext();
+           }
+         }
+       });
+    }
+  }
 
   const okBtn = slide.querySelector(".ok-btn");
   if (okBtn) {
