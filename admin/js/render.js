@@ -36,6 +36,7 @@ export function renderTable() {
     if (col.type === 'number') { svgIcon = SVGS.number; bg = '#fef9c3'; color = '#854d0e'; }
     if (col.type === 'email')  { svgIcon = SVGS.email;  bg = '#fde2e4'; color = '#d1495b'; } // Red envelope
     if (col.type === 'boolean') { svgIcon = SVGS.boolean; bg = '#f3f4f6'; color = '#9ca3af'; } // Grey crossed circle
+    if (col.type === 'status') { svgIcon = SVGS.check; bg = '#e7f6ee'; color = '#12805c'; }
 
     headHtml += `<th>
                   <div class="th-content">
@@ -70,7 +71,9 @@ export function renderTable() {
 
       let cellHtml = `<span>${val}</span>`;
       
-      if (col.type === 'time') {
+      if (col.id === 'response_type') {
+        cellHtml = `<span class="status-badge"><span class="dot"></span>Completed</span>`;
+      } else if (col.type === 'time') {
         cellHtml = `<span>${formatDate(val)}</span>`;
 
       } else if (col.id === 'tactical-positions' || col.id === 'special-abilities') {
@@ -169,4 +172,305 @@ export function renderDrawer(rowIndex) {
 
   drawerBody.innerHTML = html;
 }
+
+// ── Summary View Rendering ──────────────────────────────────────────
+
+function timeAgo(dateString) {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffInSeconds = Math.floor((now - date) / 1000);
+  
+  if (diffInSeconds < 60) return `${diffInSeconds} seconds ago`;
+  const diffInMinutes = Math.floor(diffInSeconds / 60);
+  if (diffInMinutes < 60) return `${diffInMinutes} mins ago`;
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) return `${diffInHours} hours ago`;
+  const diffInDays = Math.floor(diffInHours / 24);
+  if (diffInDays < 30) return `${diffInDays} days ago`;
+  const diffInMonths = Math.floor(diffInDays / 30);
+  if (diffInMonths < 12) return `${diffInMonths} months ago`;
+  const diffInYears = Math.floor(diffInMonths / 12);
+  return `${diffInYears} years ago`;
+}
+
+function renderChoiceSummary(col, data, values, answeredCount) {
+  const counts = {};
+  values.forEach(v => {
+    String(v).split(',').forEach(val => {
+      const trimmed = val.trim();
+      if (trimmed) {
+         counts[trimmed] = (counts[trimmed] || 0) + 1;
+      }
+    });
+  });
+
+  const labels = col.choices || Object.keys(counts);
+  
+  let tableHtml = `<table class="choice-table">
+    <thead><tr><th>Choices</th><th>Responses</th><th>Percentages</th></tr></thead><tbody>`;
+  
+  labels.forEach(label => {
+    const count = counts[label] || 0;
+    const perc = answeredCount > 0 ? ((count / answeredCount) * 100).toFixed(1) : 0;
+    tableHtml += `<tr>
+      <td>${label}</td>
+      <td>${count}</td>
+      <td>${perc}%</td>
+    </tr>`;
+  });
+  tableHtml += `</tbody></table>`;
+
+  const chartDataStr = encodeURIComponent(JSON.stringify({
+    labels,
+    data: labels.map(l => counts[l] || 0)
+  }));
+
+  // Trend Aggregation
+  const dailyCounts = {};
+  data.forEach(row => {
+    if (!row.created_at) return;
+    const dateStr = row.created_at.split('T')[0];
+    if (!dailyCounts[dateStr]) dailyCounts[dateStr] = {};
+    
+    let val = row[col.id];
+    if (val !== undefined && val !== null && val !== '') {
+      String(val).split(',').forEach(v => {
+        const trimmed = v.trim();
+        if (trimmed && labels.includes(trimmed)) {
+          dailyCounts[dateStr][trimmed] = (dailyCounts[dateStr][trimmed] || 0) + 1;
+        }
+      });
+    }
+  });
+
+  const dates = Object.keys(dailyCounts).sort();
+  const trendDatasets = labels.map(label => {
+    return {
+      label: label,
+      data: dates.map(d => dailyCounts[d][label] || 0)
+    };
+  });
+  
+  const trendDataStr = encodeURIComponent(JSON.stringify({
+    type: 'choice',
+    dates: dates,
+    datasets: trendDatasets
+  }));
+
+  return `
+    <div class="card-controls">
+      <div class="summary-tabs">
+        <button class="summary-tab active" data-tab="overview">Overview</button>
+        <button class="summary-tab" data-tab="trends"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l10 10-10 10L2 12z"/></svg> Trends</button>
+      </div>
+      <div class="view-toggles" data-chart-data="${chartDataStr}">
+        <button class="view-toggle-btn active" data-view="table"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></button>
+        <button class="view-toggle-btn" data-view="hbar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h12M4 12h8M4 18h16"/></svg></button>
+        <button class="view-toggle-btn" data-view="vbar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 20V4M12 20v-8M18 20v-12"/></svg></button>
+      </div>
+    </div>
+    <div class="summary-body-container">
+      <div class="choice-view-container overview-container">
+        <div class="choice-table-wrap">
+          ${tableHtml}
+        </div>
+        <div class="chart-container" style="display:none;">
+          <canvas></canvas>
+        </div>
+      </div>
+      <div class="trends-container chart-container" style="display:none;" data-trend-data="${trendDataStr}">
+        <canvas></canvas>
+      </div>
+    </div>
+  `;
+}
+
+function renderNumberSummary(col, data, values) {
+  const nums = values.map(v => parseFloat(v)).filter(n => !isNaN(n));
+  if (nums.length === 0) return `<div style="padding:20px;color:#6b7280;">No numeric data available.</div>`;
+  
+  const sum = nums.reduce((a,b) => a + b, 0);
+  const mean = (sum / nums.length).toFixed(2);
+  
+  nums.sort((a,b) => a - b);
+  const mid = Math.floor(nums.length / 2);
+  const median = nums.length % 2 !== 0 ? nums[mid] : ((nums[mid - 1] + nums[mid]) / 2).toFixed(2);
+  
+  const min = nums[0];
+  const max = nums[nums.length - 1];
+  
+  const meanNum = parseFloat(mean);
+  const variance = nums.reduce((acc, val) => acc + Math.pow(val - meanNum, 2), 0) / nums.length;
+  const stdDev = Math.sqrt(variance).toFixed(2);
+
+  const infoSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>`;
+
+  const statsHtml = `
+    <div class="numeric-stats-grid">
+      <div class="stat-box">
+        <div class="stat-value">${mean}</div>
+        <div class="stat-label">Mean ${infoSvg}</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value">${median}</div>
+        <div class="stat-label">Median ${infoSvg}</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value">${min} - ${max}</div>
+        <div class="stat-label">Min-Max ${infoSvg}</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value">${stdDev}</div>
+        <div class="stat-label">Standard deviation ${infoSvg}</div>
+      </div>
+    </div>
+  `;
+
+  const textHtml = renderTextSummary(col, data);
+
+  // Trend Aggregation
+  const dailySums = {};
+  data.forEach(row => {
+    if (!row.created_at) return;
+    const dateStr = row.created_at.split('T')[0];
+    let val = row[col.id];
+    const n = parseFloat(val);
+    if (!isNaN(n)) {
+       if (!dailySums[dateStr]) dailySums[dateStr] = { sum: 0, count: 0 };
+       dailySums[dateStr].sum += n;
+       dailySums[dateStr].count += 1;
+    }
+  });
+
+  const dates = Object.keys(dailySums).sort();
+  const trendData = dates.map(d => {
+    return parseFloat((dailySums[d].sum / dailySums[d].count).toFixed(2));
+  });
+
+  const trendDataStr = encodeURIComponent(JSON.stringify({
+    type: 'number',
+    dates: dates,
+    data: trendData
+  }));
+
+  return `
+    <div class="card-controls">
+      <div class="summary-tabs">
+        <button class="summary-tab active" data-tab="overview">Overview</button>
+        <button class="summary-tab" data-tab="trends"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l10 10-10 10L2 12z"/></svg> Trends</button>
+      </div>
+      <div class="view-toggles">
+        <button class="view-toggle-btn active" data-view="stats"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg></button>
+        <button class="view-toggle-btn" data-view="list"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></button>
+      </div>
+    </div>
+    <div class="summary-body-container">
+      <div class="number-view-container overview-container">
+        <div class="stats-wrap">
+          ${statsHtml}
+        </div>
+        <div class="list-wrap" style="display:none;">
+          ${textHtml}
+        </div>
+      </div>
+      <div class="trends-container chart-container" style="display:none;" data-trend-data="${trendDataStr}">
+        <canvas></canvas>
+      </div>
+    </div>
+  `;
+}
+
+function renderTextSummary(col, data) {
+  let listHtml = `<div class="text-list" id="text-list-${col.id}">`;
+  let count = 0;
+  
+  data.forEach(row => {
+    let val = row[col.id];
+    if (val !== undefined && val !== null && val !== '' && val !== '–') {
+      if (col.type === 'file' && isUrl(val)) {
+        const firstName = row['talent-contact_firstname'] || row['rep-contact_rep_firstname'] || row['talent-info-for-rep_firstname'] || 'View Attachment';
+        val = `<a href="${val}" target="_blank" style="color:#2563eb;text-decoration:none;">${firstName}</a>`;
+      }
+      listHtml += `
+        <div class="text-list-item" data-val="${String(val).toLowerCase()}">
+          <div class="text-list-quote">“</div>
+          <div class="text-list-val">${val}</div>
+          <div class="text-list-date">${timeAgo(row.created_at)}</div>
+        </div>
+      `;
+      count++;
+    }
+  });
+  listHtml += `</div>`;
+
+  return `
+    <div class="text-search-row">
+      <div class="text-search-wrapper">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input type="text" class="text-search-input" data-target="text-list-${col.id}" placeholder="Search responses">
+      </div>
+      <div class="text-results-count">${count} results</div>
+      <button class="text-sort-btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"/></svg>
+      </button>
+    </div>
+    ${listHtml}
+  `;
+}
+
+export function renderSummary() {
+  const container = document.getElementById("summary-container");
+  if (!container) return;
+
+  const data = state.submissions;
+  if (!data || data.length === 0) {
+    container.innerHTML = `<div style="text-align:center;padding:40px;color:#6b7280;">No data available yet.</div>`;
+    return;
+  }
+
+  let html = '';
+  const totalPeople = data.length;
+
+  state.columns.forEach((col, index) => {
+    if (col.id === 'created_at' || col.id === 'id') return;
+
+    let answeredCount = 0;
+    const values = [];
+    data.forEach(row => {
+      const val = row[col.id];
+      if (val !== undefined && val !== null && val !== '' && val !== '–') {
+        answeredCount++;
+        values.push(val);
+      }
+    });
+
+    const badgeClass = col.filterType === 'number' ? 'number-badge' : (col.filterType === 'text' || col.filterType === 'date' || col.type === 'file' ? 'text-badge' : '');
+    const badgeIcon = col.filterType === 'number' ? '#' : `<svg width="14" height="14" viewBox="0 0 24 24" style="margin-top:2px"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" fill="none"/></svg>`;
+
+    html += `
+      <div class="summary-card" id="summary-card-${col.id}">
+        <div class="summary-card-header">
+          <div class="q-title-row">
+            <span class="q-badge ${badgeClass}">${badgeIcon} ${index}</span>
+            <span class="q-title">${col.label}</span>
+          </div>
+          <span class="q-meta">${answeredCount} out of ${totalPeople} people answered this question.</span>
+        </div>
+    `;
+
+    if (col.filterType === 'choice') {
+      html += renderChoiceSummary(col, data, values, answeredCount);
+    } else if (col.filterType === 'number') {
+      html += renderNumberSummary(col, data, values);
+    } else {
+      html += renderTextSummary(col, data);
+    }
+
+    html += `</div>`;
+  });
+
+  container.innerHTML = html;
+}
+
 

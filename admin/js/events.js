@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { renderTable, renderColumnList, renderDrawer } from './render.js';
+import { renderTable, renderColumnList, renderDrawer, renderSummary } from './render.js';
 import { COLUMNS } from './constants.js';
 import { isUrl } from './utils.js';
 import { signIn, signOut } from './auth.js';
@@ -62,6 +62,10 @@ export function setupGlobalListeners() {
       if (target) {
         target.classList.remove("hidden");
         target.classList.add("active");
+        
+        if (tab.getAttribute("data-target") === "summary-view") {
+          renderSummary();
+        }
       }
     });
   });
@@ -435,6 +439,48 @@ export function setupGlobalListeners() {
     renderTable();
   });
 
+  // Export CSV Logic
+  const exportBtn = document.getElementById("export-btn");
+  exportBtn?.addEventListener("click", () => {
+    if (!state.filteredSubmissions || state.filteredSubmissions.length === 0) {
+      alert("No data to export");
+      return;
+    }
+
+    const cols = state.columns.filter(c => c.visible);
+    
+    // Header row
+    let csv = "Email,";
+    csv += cols.map(c => `"${c.label.replace(/"/g, '""')}"`).join(',') + '\n';
+
+    // Data rows
+    state.filteredSubmissions.forEach(row => {
+      const email = row['talent-contact_email'] || row['rep-contact_rep_email'] || row['talent-info-for-rep_email'] || '';
+      let line = `"${email.replace(/"/g, '""')}",`;
+      
+      line += cols.map(c => {
+        let val = row[c.id];
+        if (val === undefined || val === null) val = '';
+        if (c.id === 'response_type') val = 'Completed';
+        val = String(val).replace(/"/g, '""');
+        // Handle newlines inside csv fields
+        val = val.replace(/\n/g, ' '); 
+        return `"${val}"`;
+      }).join(',');
+      
+      csv += line + '\n';
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `sportyreps_export_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  });
+
   // Data Grid Row Actions
   document.getElementById("grid-body")?.addEventListener("click", (e) => {
     const openBtn = e.target.closest(".open-row-btn");
@@ -490,5 +536,232 @@ export function setupGlobalListeners() {
   closePreviewBtn?.addEventListener("click", closePreviewModal);
   previewModal?.addEventListener("click", (e) => {
     if (e.target === previewModal) closePreviewModal();
+  });
+
+  // Summary View Logic
+  const summaryContainer = document.getElementById("summary-container");
+  
+  summaryContainer?.addEventListener("click", (e) => {
+    const summaryTab = e.target.closest(".summary-tab");
+    if (summaryTab) {
+      const controls = summaryTab.closest(".card-controls");
+      const summaryTabs = controls.querySelector(".summary-tabs");
+      
+      summaryTabs.querySelectorAll(".summary-tab").forEach(btn => btn.classList.remove("active"));
+      summaryTab.classList.add("active");
+      
+      const tabType = summaryTab.getAttribute("data-tab");
+      const bodyContainer = controls.nextElementSibling;
+      
+      const overviewContainer = bodyContainer.querySelector(".overview-container");
+      const trendsContainer = bodyContainer.querySelector(".trends-container");
+      const viewToggles = controls.querySelector(".view-toggles");
+      
+      if (tabType === 'overview') {
+        overviewContainer.style.display = "block";
+        trendsContainer.style.display = "none";
+        if (viewToggles) viewToggles.style.display = "flex";
+      } else if (tabType === 'trends') {
+        overviewContainer.style.display = "none";
+        trendsContainer.style.display = "block";
+        if (viewToggles) viewToggles.style.display = "none";
+        
+        const canvas = trendsContainer.querySelector("canvas");
+        if (canvas) {
+          const trendDataStr = trendsContainer.getAttribute("data-trend-data");
+          if (trendDataStr) {
+            const trendData = JSON.parse(decodeURIComponent(trendDataStr));
+            
+            if (canvas.chartInstance) {
+               canvas.chartInstance.destroy();
+               canvas.chartInstance = null;
+            }
+
+            // Need at least 2 date points to render a meaningful trend
+            if (!trendData.dates || trendData.dates.length < 2) {
+              canvas.style.display = 'none';
+              const emptyMsg = document.createElement('div');
+              emptyMsg.className = 'trends-empty';
+              emptyMsg.textContent = 'Not enough data to show trends yet. More submissions over multiple days are needed.';
+              trendsContainer.appendChild(emptyMsg);
+              return;
+            }
+            canvas.style.display = '';
+            
+            const isChoice = trendData.type === 'choice';
+            const chartDatasets = isChoice 
+               ? trendData.datasets.map((ds, i) => ({
+                   label: ds.label,
+                   data: ds.data,
+                   borderColor: `hsl(${i * 65}, 70%, 60%)`,
+                   backgroundColor: `hsla(${i * 65}, 70%, 60%, 0.1)`,
+                   fill: false,
+                   tension: 0.3
+                 }))
+               : [{
+                   label: 'Average',
+                   data: trendData.data,
+                   borderColor: '#7c3aed',
+                   backgroundColor: 'rgba(124, 58, 237, 0.1)',
+                   fill: true,
+                   tension: 0.4
+                 }];
+
+            canvas.chartInstance = new Chart(canvas, {
+              type: 'line',
+              data: {
+                labels: trendData.dates.map(d => new Date(d).toLocaleDateString(undefined, {month: 'short', day: 'numeric'})),
+                datasets: chartDatasets
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { display: isChoice, position: 'top' },
+                  tooltip: { enabled: true, mode: 'index', intersect: false }
+                },
+                scales: {
+                  x: { grid: { display: false } },
+                  y: { beginAtZero: true }
+                },
+                interaction: {
+                  mode: 'nearest',
+                  axis: 'x',
+                  intersect: false
+                }
+              }
+            });
+          }
+        }
+      }
+    }
+
+    const toggleBtn = e.target.closest(".view-toggle-btn");
+    if (toggleBtn) {
+      const controls = toggleBtn.closest(".card-controls");
+      const togglesContainer = toggleBtn.closest(".view-toggles");
+      
+      togglesContainer.querySelectorAll(".view-toggle-btn").forEach(btn => btn.classList.remove("active"));
+      toggleBtn.classList.add("active");
+      
+      const viewType = toggleBtn.getAttribute("data-view"); 
+      const bodyContainer = controls.nextElementSibling;
+      const viewContainer = bodyContainer.querySelector(".overview-container");
+      
+      if (viewContainer.classList.contains("choice-view-container")) {
+        const tableWrap = viewContainer.querySelector(".choice-table-wrap");
+        const chartWrap = viewContainer.querySelector(".chart-container");
+        const canvas = chartWrap.querySelector("canvas");
+        
+        if (viewType === 'table') {
+          tableWrap.style.display = "block";
+          chartWrap.style.display = "none";
+        } else {
+          tableWrap.style.display = "none";
+          chartWrap.style.display = "block";
+          
+          const chartDataStr = togglesContainer.getAttribute("data-chart-data");
+          const chartData = JSON.parse(decodeURIComponent(chartDataStr));
+          
+          if (canvas.chartInstance) {
+            canvas.chartInstance.destroy();
+          }
+          
+          const isHorizontal = viewType === 'hbar';
+          
+          canvas.chartInstance = new Chart(canvas, {
+            type: 'bar',
+            data: {
+              labels: chartData.labels,
+              datasets: [{
+                label: 'Responses',
+                data: chartData.data,
+                backgroundColor: '#d8b4fe',
+                hoverBackgroundColor: '#c084fc',
+                borderRadius: 4
+              }]
+            },
+            options: {
+              indexAxis: isHorizontal ? 'y' : 'x',
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { display: false },
+                tooltip: { enabled: false }
+              },
+              scales: {
+                x: { grid: { display: false }, border: { display: false }, ticks: { display: !isHorizontal } },
+                y: { grid: { display: false }, border: { display: false }, ticks: { display: isHorizontal } }
+              },
+              animation: {
+                onComplete: function() {
+                  const ctx = this.ctx;
+                  ctx.textAlign = 'center';
+                  ctx.textBaseline = 'bottom';
+                  ctx.fillStyle = '#7c3aed';
+                  ctx.font = 'bold 13px Inter, sans-serif';
+
+                  this.data.datasets.forEach(function (dataset, i) {
+                    const meta = canvas.chartInstance.getDatasetMeta(i);
+                    meta.data.forEach(function (bar, index) {
+                      const data = dataset.data[index];
+                      if (data > 0) {
+                        if (isHorizontal) {
+                          ctx.textAlign = 'left';
+                          ctx.textBaseline = 'middle';
+                          ctx.fillText(data, bar.x + 8, bar.y);
+                        } else {
+                          ctx.textAlign = 'center';
+                          ctx.textBaseline = 'bottom';
+                          ctx.fillText(data, bar.x, bar.y - 6);
+                        }
+                      }
+                    });
+                  });
+                }
+              }
+            }
+          });
+        }
+      } else if (viewContainer.classList.contains("number-view-container")) {
+        const statsWrap = viewContainer.querySelector(".stats-wrap");
+        const listWrap = viewContainer.querySelector(".list-wrap");
+        
+        if (viewType === 'stats') {
+          statsWrap.style.display = "block";
+          listWrap.style.display = "none";
+        } else if (viewType === 'list') {
+          statsWrap.style.display = "none";
+          listWrap.style.display = "block";
+        }
+      }
+    }
+  });
+
+  summaryContainer?.addEventListener("input", (e) => {
+    if (e.target.classList.contains("text-search-input")) {
+      const targetId = e.target.getAttribute("data-target");
+      const listContainer = document.getElementById(targetId);
+      const q = e.target.value.toLowerCase();
+      
+      if (listContainer) {
+        let count = 0;
+        const items = listContainer.querySelectorAll(".text-list-item");
+        items.forEach(item => {
+          const val = item.getAttribute("data-val") || "";
+          if (val.includes(q)) {
+            item.style.display = "flex";
+            count++;
+          } else {
+            item.style.display = "none";
+          }
+        });
+        
+        const countDisplay = e.target.closest(".text-search-row").querySelector(".text-results-count");
+        if (countDisplay) {
+          countDisplay.textContent = count + " results";
+        }
+      }
+    }
   });
 }

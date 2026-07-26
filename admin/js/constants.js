@@ -6,6 +6,7 @@
 export const COLUMNS = [
   // ── Meta ──────────────────────────────────────────────────
   { id: 'created_at',                       label: 'Response time',                type: 'time',   filterType: 'date', defaultVisible: true },
+  { id: 'response_type',                    label: 'Response type',                type: 'status', filterType: 'text', defaultVisible: true },
 
   // ── Discovery ─────────────────────────────────────────────
   { id: 'source',                           label: 'How did you find this link?',   type: 'text',   filterType: 'choice', choices: ["Whatsapp", "Someone referred you here", "Website", "Google search", "Other Social media", "Other"], defaultVisible: true },
@@ -65,9 +66,9 @@ export const COLUMNS = [
   { id: 'special-abilities',               label: 'Special abilities',              type: 'text',   filterType: 'text', defaultVisible: true },
 
   // ── Physical ──────────────────────────────────────────────
-  { id: 'height',                           label: 'Height (ft)',                   type: 'text',   filterType: 'text', defaultVisible: true },
+  { id: 'height',                           label: 'Height (ft)',                   type: 'text',   filterType: 'number', defaultVisible: true },
   { id: 'weight',                           label: 'Weight (kg)',                   type: 'number', filterType: 'number', defaultVisible: true },
-  { id: 'speed',                            label: 'Speed (mph)',                   type: 'number', filterType: 'number', defaultVisible: true },
+  { id: 'speed',                            label: 'Speed (mph)',                   type: 'number', filterType: 'text', defaultVisible: true },
 
   // ── Education & Legal ─────────────────────────────────────
   { id: 'education',                        label: 'Highest education',             type: 'text',   filterType: 'choice', choices: ["Primary School", "High School / Secondary", "Undergraduate Degree", "Postgraduate Degree", "None / Other"], defaultVisible: true },
