@@ -13,8 +13,8 @@ const app = express();
 app.use(helmet());
 app.use(cors({
   origin: [
-    'https://sportyreps-form.vercel.app',
-    'https://sportyreps-form-g66s.vercel.app'
+    'https://signup.sportyreps.com',
+    'https://admin.sportyreps.com'
   ]
 })); // In production, restrict this to your domain
 app.use(express.json());
