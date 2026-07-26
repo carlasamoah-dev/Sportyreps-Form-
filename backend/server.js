@@ -9,6 +9,9 @@ const submissionRoutes = require('./routes/submission.routes');
 
 const app = express();
 
+// --- Trust Proxy (Required for rate limiting on Render) ---
+app.set('trust proxy', 1);
+
 // --- Security & Utility Middlewares ---
 app.use(helmet());
 app.use(cors({ origin: '*' })); // In production, restrict this to your domain
