@@ -11,7 +11,12 @@ const app = express();
 
 // --- Security & Utility Middlewares ---
 app.use(helmet());
-app.use(cors({ origin: '*' })); // In production, restrict this to your domain
+app.use(cors({
+  origin: [
+    'https://sportyreps-form.vercel.app',
+    'https://sportyreps-form-g66s.vercel.app'
+  ]
+})); // In production, restrict this to your domain
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
