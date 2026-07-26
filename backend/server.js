@@ -14,7 +14,12 @@ app.set('trust proxy', 1);
 
 // --- Security & Utility Middlewares ---
 app.use(helmet());
-app.use(cors({ origin: '*' })); // In production, restrict this to your domain
+app.use(cors({
+  origin: [
+    'https://signup.sportyreps.com',
+    'https://admin.sportyreps.com'
+  ]
+})); // In production, restrict this to your domain
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
