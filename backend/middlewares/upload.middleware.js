@@ -9,11 +9,12 @@ const upload = multer({
     fileSize: 10 * 1024 * 1024, // 10 MB maximum file size
   },
   fileFilter: (req, file, cb) => {
-    // Only accept PDFs and Images based on client form specs
-    if (file.mimetype.startsWith('image/') || file.mimetype === 'application/pdf') {
+    // Only accept PDFs, DOCX, and Images based on client form specs
+    const docxMime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    if (file.mimetype.startsWith('image/') || file.mimetype === 'application/pdf' || file.mimetype === docxMime) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Only images and PDFs are allowed.'), false);
+      cb(new Error('Invalid file type. Only images, PDFs, and DOCX files are allowed.'), false);
     }
   }
 });

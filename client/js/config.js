@@ -35,7 +35,7 @@ export const FORMS = {
         id: "minor-check",
         type: "multiple-choice",
         number: "3",
-        question: "Are you a minor(Under 18years)?",
+        question: "Are you a minor (Under 18 years)?",
         choices: ["Yes", "No"],
         required: true,
         logic: {
@@ -90,8 +90,8 @@ export const FORMS = {
           "Biological Parent",
           "Adopted parent",
           "Guardian",
-          "Immediate familiy relative",
-          "Extended familiy relative",
+          "Immediate family relative",
+          "Extended family relative",
           "Professional contact",
           "Player Manager",
           "Friend",
@@ -117,7 +117,7 @@ export const FORMS = {
         id: "talent-info-for-rep",
         type: "contact-info",
         number: "7",
-        question: "What's your talents contact information?",
+        question: "What's your talent's contact information?",
         description: "Please enter details of the player you represent",
         fields: [
           { name: "firstname", label: "First name", type: "text", required: true },
@@ -131,9 +131,9 @@ export const FORMS = {
         id: "cv-upload",
         type: "file-upload",
         number: "8",
-        question: "Please attach your football CV if applicable(pdf format E.g Smith-CV)",
+        question: "Please attach your football CV if applicable(pdf or docx format E.g Smith-CV)",
         description: "Kindly create this to show the different clubs that have trained you and have played for. Having played for one club is fine, kindly state dates on CV, please get some help if you are unsure on how to create one. If you have no club, upload document saying no club on a blank sheet.",
-        accept: ".pdf",
+        accept: ".pdf,.docx",
         required: false
       },
       {

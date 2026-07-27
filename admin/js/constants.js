@@ -13,7 +13,7 @@ export const COLUMNS = [
 
   // ── Role & Minor ──────────────────────────────────────────
   { id: 'role',                             label: 'Role',                          type: 'text',   filterType: 'choice', choices: ["Talent", "Representative"], defaultVisible: true },
-  { id: 'minor-check',                      label: 'Are you a minor (Under 18years)?',             type: 'boolean', filterType: 'choice', choices: ["Yes", "No"], defaultVisible: true },
+  { id: 'minor-check',                      label: 'Are you a minor (Under 18 years)?',             type: 'boolean', filterType: 'choice', choices: ["Yes", "No"], defaultVisible: true },
 
   // ── Talent Contact ────────────────────────────────────────
   { id: 'talent-contact_firstname',         label: 'First name',                    type: 'text',   filterType: 'text', defaultVisible: true },
@@ -29,7 +29,7 @@ export const COLUMNS = [
   { id: 'manager-contact_manager_email',    label: 'Manager email',                 type: 'text',   filterType: 'text', defaultVisible: true },
 
   // ── Representative Info ───────────────────────────────────
-  { id: 'rep-type',                         label: 'Representative type',           type: 'text',   filterType: 'choice', choices: ["Biological Parent", "Adopted parent", "Guardian", "Immediate familiy relative", "Extended familiy relative", "Professional contact", "Player Manager", "Friend", "Other"], defaultVisible: true },
+  { id: 'rep-type',                         label: 'Representative type',           type: 'text',   filterType: 'choice', choices: ["Biological Parent", "Adopted parent", "Guardian", "Immediate family relative", "Extended family relative", "Professional contact", "Player Manager", "Friend", "Other"], defaultVisible: true },
   { id: 'rep-contact_rep_firstname',        label: 'Rep first name',                type: 'text',   filterType: 'text', defaultVisible: true },
   { id: 'rep-contact_rep_lastname',         label: 'Rep last name',                 type: 'text',   filterType: 'text', defaultVisible: true },
   { id: 'rep-contact_rep_phone',            label: 'Rep phone number',              type: 'phone',  filterType: 'text', defaultVisible: true },
