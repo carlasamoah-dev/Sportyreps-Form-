@@ -1,4 +1,4 @@
-import { state } from './state.js';
+import { state, recomputeAutoHide } from './state.js';
 import { renderTable, renderColumnList, renderDrawer, renderSummary } from './render.js';
 import { COLUMNS } from './constants.js';
 import { isUrl } from './utils.js';
@@ -430,7 +430,10 @@ export function setupGlobalListeners() {
   });
 
   resetColBtn?.addEventListener("click", () => {
-    state.columns = COLUMNS.map(c => ({ ...c, visible: c.defaultVisible }));
+    state.columns = COLUMNS.map(c => ({ ...c, visible: c.defaultVisible, systemHidden: false }));
+    // Rebuilding the column list drops the derived auto-hide flags, so restore
+    // them from the current data (this touches only `systemHidden`).
+    recomputeAutoHide();
     renderColumnList();
   });
 

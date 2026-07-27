@@ -246,6 +246,15 @@ input[type="checkbox"] {
 }
 .column-item:hover { background: var(--bg-hover); }
 
+/* Auto-hide (empty column) marker in the manage panel. Amber and set apart
+   from the grey manual-hide toggle so the two hide reasons read distinctly. */
+.auto-hide-badge {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: #f59e0b;
+}
+
 /* Animations */
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes drawerIn { from { transform: translateX(100%); } to { transform: translateX(0); } }

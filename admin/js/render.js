@@ -12,7 +12,9 @@ export function renderTable() {
   const data = state.filteredSubmissions;
   if (countEl) countEl.textContent = data.length;
 
-  const visibleCols = state.columns.filter(c => c.visible);
+  // A column is shown only when it has at least one entry (not auto-hidden)
+  // AND it is not manually hidden. The two hide reasons are independent flags.
+  const visibleCols = state.columns.filter(c => c.visible && !c.systemHidden);
 
   // Render Header
   let headHtml = `<tr>`;
@@ -121,14 +123,24 @@ export function renderColumnList() {
   if (!list) return;
 
   let html = ``;
+  // Every question is always listed here, including those with zero entries.
   state.columns.forEach((col, index) => {
+    // Auto-hidden columns (zero entries) get a distinct amber eye-with-slash
+    // badge next to the label, kept visually separate from the grey manual
+    // hide toggle on the right so the two hide reasons are separable at a
+    // glance. The badge reflects `systemHidden`; the toggle reflects `visible`.
+    const autoHideBadge = col.systemHidden
+      ? `<span class="auto-hide-badge" title="Auto-hidden — no entries yet"><svg width="16" height="16" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 10.7a2 2 0 0 0 2.8 2.8M9.4 5.2A9.4 9.4 0 0 1 12 5c5 0 9 4.5 9 7 0 1-1 2.6-2.6 4M6.3 6.8C4 8.2 3 10 3 12c0 2 4 7 9 7 1.2 0 2.3-.2 3.3-.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>`
+      : ``;
+
     html += `
       <div class="column-item" draggable="true" data-index="${index}">
         <svg width="16" height="16" viewBox="0 0 24 24" style="color:var(--text-disabled);flex-shrink:0;"><circle cx="9" cy="6" r="1.5" fill="currentColor"></circle><circle cx="15" cy="6" r="1.5" fill="currentColor"></circle><circle cx="9" cy="12" r="1.5" fill="currentColor"></circle><circle cx="15" cy="12" r="1.5" fill="currentColor"></circle><circle cx="9" cy="18" r="1.5" fill="currentColor"></circle><circle cx="15" cy="18" r="1.5" fill="currentColor"></circle></svg>
         <span style="flex:1;font-size:13.5px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-left:8px;">${col.label}</span>
+        ${autoHideBadge}
         <button class="btn-text toggle-col-btn" data-id="${col.id}" style="width:30px;height:30px;padding:0;color:var(--text-muted);">
-          ${col.visible ? 
-            `<svg width="17" height="17" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"></path><circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" stroke-width="1.7"></circle></svg>` : 
+          ${col.visible ?
+            `<svg width="17" height="17" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"></path><circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" stroke-width="1.7"></circle></svg>` :
             `<svg width="17" height="17" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 10.7a2 2 0 0 0 2.8 2.8M9.4 5.2A9.4 9.4 0 0 1 12 5c5 0 9 4.5 9 7 0 1-1 2.6-2.6 4M6.3 6.8C4 8.2 3 10 3 12c0 2 4 7 9 7 1.2 0 2.3-.2 3.3-.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path></svg>`
           }
         </button>

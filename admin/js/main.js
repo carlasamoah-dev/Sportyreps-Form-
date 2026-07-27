@@ -1,5 +1,5 @@
 import { fetchSubmissions } from './api.js';
-import { state } from './state.js';
+import { state, recomputeAutoHide } from './state.js';
 import { renderTable } from './render.js';
 import { renderSummary } from './summary.js';
 import { setupGlobalListeners } from './events.js';
@@ -10,6 +10,8 @@ export async function loadDataAndRender() {
     const data = await fetchSubmissions();
     state.submissions = data;
     state.filteredSubmissions = data;
+    // Derive auto-hide fresh from the full dataset on each admin load.
+    recomputeAutoHide();
     renderTable();
     renderSummary();
     setupRealtimeSubscription();
@@ -58,7 +60,12 @@ function setupRealtimeSubscription() {
       // Add the new submission to the top of the lists
       state.submissions.unshift(payload.new);
       state.filteredSubmissions.unshift(payload.new);
-      
+
+      // A new entry may fill a previously-empty column, so recompute auto-hide
+      // before re-rendering — the column reappears the moment its first entry
+      // exists, with no manual action required.
+      recomputeAutoHide();
+
       // Re-render
       renderTable();
       renderSummary();
