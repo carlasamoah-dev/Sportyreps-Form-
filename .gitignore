@@ -30,3 +30,11 @@ backend/logs/
 dist/
 build/
 .tmp/
+
+# Typeform migration — anything holding personal data stays out of git.
+# The raw export, the dropped media batches and the generated payloads all
+# contain names, contact details and dates of birth, including those of minors.
+migration/source/
+migration/incoming/
+migration/out/
+migration/review_flags.csv

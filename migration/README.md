@@ -1,0 +1,100 @@
+# Typeform back-migration (2023 to 2024 responses)
+
+Brings 69 legacy Typeform responses and their 200 uploaded files into the
+current Supabase build, one small batch at a time, with a verification gate at
+every step.
+
+## Why it is built this way
+
+The single hard problem is matching a media file to the right person and the
+right slot. Three facts from the export decide the design:
+
+- File URLs in the export are not public. They need a Typeform API token, which
+  is why files are being supplied by hand in batches instead of fetched.
+- **Filenames are the only reliable link back to a person.** The CV filename
+  contains the player's name in just 12 of 50 cases, and photo filenames in 21
+  of 150, so names cannot be read off the files. But the export records the exact
+  original filename for every file against its response and slot. Unchanged
+  filenames therefore match exactly.
+- Filenames are not globally unique. Three filenames appear under two different
+  responses, and ten responses reuse one photo across several slots. Both cases
+  are detected and held for a human decision rather than guessed at.
+
+Hence the rule for every batch: **drop the files exactly as exported, do not
+rename them.** Renaming to the canonical `{response_id}/{slot}.{ext}` happens on
+the way into Supabase Storage, where the path itself makes a misfiled object
+visible by eye.
+
+## What is and is not in git
+
+Committed: the scripts, `file_index.csv` (response id, slot, filename, hash),
+`manifest.csv` (upload ledger) and the SQL. Nothing here holds contact details
+or dates of birth.
+
+Never committed (see `.gitignore`): the raw export, the dropped media, the
+generated payloads and the review flags. Twelve of these records belong to
+under-18s, and git history is effectively permanent, so personal data stays out
+of it and lives in Supabase where it can be deleted on request.
+
+## One-time setup
+
+1. Run `migration/sql/001_migration_columns.sql` in the Supabase SQL Editor.
+   It adds the provenance columns, adds the `response_type` column the admin
+   panel already reads, and widens the storage buckets. Without it the import
+   is not idempotent and 34 of the files have nowhere legal to go.
+2. `cd backend && npm install` (the migration scripts reuse the backend's
+   `@supabase/supabase-js`).
+3. Put the raw export at `migration/source/responses.csv`, or point
+   `SOURCE_CSV` at it.
+4. `node migration/scripts/build-index.js` to regenerate `file_index.csv` and
+   `batches.md`.
+
+## The batch loop
+
+For each batch listed in `batches.md`:
+
+```bash
+# 1. drop the batch's files into migration/incoming/ with original names intact
+
+# 2. verify before anything moves
+node migration/scripts/verify-batch.js --batch 1
+
+# 3. once the report is clean, record it
+node migration/scripts/verify-batch.js --batch 1 --write
+
+# 4. upload to Supabase Storage
+SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
+  node migration/scripts/upload-batch.js --batch 1
+
+# 5. build the answer payloads (whole export at once, cheap to re-run)
+node migration/scripts/transform-rows.js
+
+# 6. join answers to media and review
+node migration/scripts/link-media.js --batch 1
+
+# 7. when it looks right, write to the database
+SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
+  node migration/scripts/link-media.js --batch 1 --insert
+
+# 8. commit manifest.csv so the next session knows where the batch got to
+```
+
+Steps 2, 6 and 7 refuse to proceed while anything is on hold. A batch is
+resumable: `upload-batch.js` skips rows that already have a public URL, and the
+insert upserts on `source_response_id`.
+
+## Open policy decisions
+
+These are set in `scripts/config.js` under `POLICY` and are deliberately
+conservative. Change them there, not in the transform code.
+
+- `excludeMinors: true`. Twelve records are under 18 at submission, including a
+  12 and a 13 year old who submitted as talents. The live form ends the journey
+  for under-18s, so importing them would contradict the product's own gate.
+  Flip the flag to import them anyway.
+- Height, speed, education and position all carry unresolvable ambiguity in the
+  source. The transform maps what it safely can, nulls the rest, and records
+  every decision in `review_flags.csv` rather than inventing a value.
+- Four names appear more than once across the 50 responses. They are imported as
+  separate rows, since two submissions from one person is a fact about the data,
+  not a bug to hide. Deduplicate in the admin panel if you want one record each.
