@@ -41,6 +41,25 @@ const batchNo = argVal('--batch', null);
 const dir = argVal('--dir', PATHS.incoming);
 const dry = args.includes('--dry');
 
+/**
+ * Where the bytes for a manifest row live on disk.
+ *
+ * local_path is written by verify-batch.js and is exact, including any folder
+ * the file was dropped in. The filename fallbacks below only exist for manifests
+ * written before that column, and cannot distinguish two slots that share a
+ * filename, so they are last resort.
+ */
+const resolveSource = (r, col) => {
+  if (col.local_path !== undefined && r[col.local_path]) {
+    const exact = path.join(dir, r[col.local_path]);
+    if (fs.existsSync(exact)) return exact;
+  }
+  const flat = path.join(dir, r[col.original_filename]);
+  if (fs.existsSync(flat)) return flat;
+  return fs.readdirSync(dir).map(f => path.join(dir, f))
+    .find(f => fs.statSync(f).isFile() && path.basename(f).endsWith(r[col.original_filename])) || null;
+};
+
 const main = async () => {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
@@ -77,14 +96,10 @@ const main = async () => {
   let failed = 0;
 
   for (const r of todo) {
-    const local = path.join(dir, r[col.original_filename]);
-    const source = fs.existsSync(local)
-      ? local
-      : (fs.readdirSync(dir).map(f => path.join(dir, f))
-          .find(f => path.basename(f).endsWith(r[col.original_filename])) || null);
+    const source = resolveSource(r, col);
 
     if (!source) {
-      console.log(`  MISS ${r[col.original_filename]} not present in ${dir}`);
+      console.log(`  MISS ${r[col.local_path] || r[col.original_filename]} not present in ${dir}`);
       failed++;
       continue;
     }

@@ -16,14 +16,32 @@ right slot. Three facts from the export decide the design:
   of 150, so names cannot be read off the files. But the export records the exact
   original filename for every file against its response and slot. Unchanged
   filenames therefore match exactly.
-- Filenames are not globally unique. Three filenames appear under two different
-  responses, and ten responses reuse one photo across several slots. Both cases
-  are detected and held for a human decision rather than guessed at.
+- Filenames are not globally unique, in two different ways. Four filenames appear
+  under two different responses. Separately, 11 responses give two of their slots
+  the same original filename, and the export cannot say whether those are one
+  photo reused or two different photos that happen to share a name: the
+  `typeform_hash` column is a URL segment, unique per row by construction, so it
+  carries no information about content. Both cases are held for a human decision
+  rather than guessed at.
 
-Hence the rule for every batch: **drop the files exactly as exported, do not
-rename them.** Renaming to the canonical `{response_id}/{slot}.{ext}` happens on
-the way into Supabase Storage, where the path itself makes a misfiled object
-visible by eye.
+Hence the drop layout: **one folder per response, named after the response id.**
+The folder settles who a file belongs to, so filenames no longer have to. For
+the 11 responses above the slot has to be stated too, either by a `{slot}/`
+subfolder or by naming the file `{slot}.{ext}`.
+
+```
+incoming/{response_id}/{original_filename}     slot read off the filename
+incoming/{response_id}/{slot}/{any_filename}   slot read off the folder
+```
+
+Original filenames are still matched against `file_index.csv`, so leaving them
+unchanged remains the safest default and is what catches a file dropped into the
+wrong folder. A harness-added prefix such as `c96b7e754eed-IMG_0488.jpeg` matches
+on suffix. Flat drops straight into `incoming/` still work for the responses
+whose filenames are unambiguous.
+
+Renaming to the canonical `{response_id}/{slot}.{ext}` happens on the way into
+Supabase Storage, where the path itself makes a misfiled object visible by eye.
 
 ## What is and is not in git
 
@@ -47,14 +65,15 @@ of it and lives in Supabase where it can be deleted on request.
 3. Put the raw export at `migration/source/responses.csv`, or point
    `SOURCE_CSV` at it.
 4. `node migration/scripts/build-index.js` to regenerate `file_index.csv` and
-   `batches.md`.
+   `batches.md`. Without the export, `--from-index` rebuilds `batches.md` alone
+   from the committed index.
 
 ## The batch loop
 
 For each batch listed in `batches.md`:
 
 ```bash
-# 1. drop the batch's files into migration/incoming/ with original names intact
+# 1. drop the batch's files into migration/incoming/{response_id}/
 
 # 2. verify before anything moves
 node migration/scripts/verify-batch.js --batch 1

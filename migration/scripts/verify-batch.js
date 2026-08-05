@@ -4,16 +4,28 @@
  * Checks a dropped batch of files BEFORE anything is uploaded or written to the
  * database. Nothing is trusted: every file has to earn its place in the manifest.
  *
+ * Three drop layouts are accepted, in increasing order of safety:
+ *
+ *   incoming/FILE                        flat. Identity comes from the filename
+ *                                        alone, so it cannot be used for the
+ *                                        responses whose slots share a filename.
+ *   incoming/{response_id}/FILE          the folder names the person. A file
+ *                                        called `front.jpeg` names its own slot.
+ *   incoming/{response_id}/{slot}/FILE   both stated by the layout. Original
+ *                                        filenames can be kept unchanged.
+ *
  * Checks performed per file:
- *   1. Filename resolves to exactly one (response_id, slot) in file_index.csv.
- *      Files arriving with a harness-added hash prefix are matched on suffix.
+ *   1. The file resolves to exactly one (response_id, slot). Layout wins over
+ *      filename; a filename that fills two slots is held, never duplicated.
+ *      Files arriving with a harness-added prefix are matched on suffix.
  *   2. Magic-byte sniff confirms the bytes match the extension (a .jpg that is
  *      really a PDF is caught here).
  *   3. SHA-256 recorded, so a file dropped twice under different names is seen.
  *   4. Bucket routing resolves, otherwise the file is quarantined.
  *
  * Checks performed per response:
- *   5. Slot completeness against the index (4 of 4, or exactly what Typeform held).
+ *   5. No slot claimed by two different files.
+ *   6. Slot completeness against the index (4 of 4, or exactly what Typeform held).
  *
  * Nothing is written anywhere except a report and, with --write, manifest rows
  * with status=verified. Quarantined files are listed with the reason.
@@ -25,7 +37,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { parseCsv, toCsv } = require('./csv');
-const { PATHS, bucketForExt, storagePath, EXT_MIME } = require('./config');
+const { PATHS, SLOTS, bucketForExt, storagePath, EXT_MIME } = require('./config');
 
 const args = process.argv.slice(2);
 const argVal = (flag, fallback) => {
@@ -35,6 +47,8 @@ const argVal = (flag, fallback) => {
 const batchNo = argVal('--batch', '0');
 const dir = argVal('--dir', PATHS.incoming);
 const write = args.includes('--write');
+
+const SLOT_NAMES = SLOTS.map(s => s.slot);
 
 // Magic bytes for the formats present in this export.
 const sniff = (buf) => {
@@ -60,9 +74,111 @@ const sniffAgrees = (sniffed, ext) => {
   return ok.includes(ext);
 };
 
+/**
+ * Walk the drop directory, recording for each file whatever the layout already
+ * says about it. One level of nesting names the response, an optional second
+ * level names the slot. Anything deeper is ignored rather than guessed at.
+ */
+const collect = (root) => {
+  const out = [];
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    if (entry.name.startsWith('.')) continue;
+
+    if (entry.isFile()) {
+      out.push({ rel: entry.name, file: entry.name, responseId: null, slot: null });
+      continue;
+    }
+    if (!entry.isDirectory()) continue;
+
+    const responseId = entry.name;
+    for (const sub of fs.readdirSync(path.join(root, responseId), { withFileTypes: true })) {
+      if (sub.name.startsWith('.')) continue;
+
+      if (sub.isFile()) {
+        out.push({ rel: path.join(responseId, sub.name), file: sub.name, responseId, slot: null });
+        continue;
+      }
+      if (!sub.isDirectory()) continue;
+
+      const slot = sub.name.toLowerCase();
+      if (!SLOT_NAMES.includes(slot)) {
+        out.push({ rel: path.join(responseId, sub.name), file: sub.name, responseId, slot: null, notASlot: true });
+        continue;
+      }
+      for (const f of fs.readdirSync(path.join(root, responseId, slot), { withFileTypes: true })) {
+        if (f.isFile() && !f.name.startsWith('.')) {
+          out.push({ rel: path.join(responseId, slot, f.name), file: f.name, responseId, slot });
+        }
+      }
+    }
+  }
+  return out;
+};
+
+/**
+ * Decide which index row a dropped file is. Returns { hit } or { error }.
+ *
+ * The order matters: a slot stated by the layout is a human assertion and beats
+ * the filename, which for 11 of the 50 responses cannot tell two slots apart.
+ */
+const resolve = (entry, index) => {
+  if (entry.notASlot) {
+    return { error: `'${entry.file}' is neither a file nor one of ${SLOT_NAMES.join('/')}` };
+  }
+
+  const rows = entry.responseId
+    ? index.filter(e => e.response_id === entry.responseId)
+    : index;
+
+  if (entry.responseId && !rows.length) {
+    return { error: `folder '${entry.responseId}' is not a response id in file_index.csv` };
+  }
+
+  // 1. Slot stated by the layout.
+  if (entry.slot) {
+    const hit = rows.find(e => e.slot === entry.slot);
+    return hit ? { hit } : { error: `${entry.responseId} has no ${entry.slot} slot in the index` };
+  }
+
+  // 2. Slot stated by the filename itself, with or without a harness prefix
+  //    (`front.jpeg`, `c96b7e754eed-front.jpeg`).
+  const stem = path.basename(entry.file, path.extname(entry.file)).toLowerCase();
+  const named = SLOT_NAMES.find(s => s === stem || s === stem.split('-').pop());
+  if (named) {
+    if (!entry.responseId) return { error: `'${entry.file}' names a slot but not a response; put it in a folder named after its response id` };
+    const hit = rows.find(e => e.slot === named);
+    return hit ? { hit } : { error: `${entry.responseId} has no ${named} slot in the index` };
+  }
+
+  // 3. Fall back to the original filename. Exact match first, then suffix match
+  //    (upload harnesses prepend an opaque id to the original name).
+  let hits = rows.filter(e => e.original_filename === entry.file);
+  if (!hits.length) hits = rows.filter(e => entry.file.endsWith(e.original_filename));
+  if (!hits.length) return { error: 'filename not found in file_index.csv' };
+
+  const responseIds = [...new Set(hits.map(h => h.response_id))];
+  if (responseIds.length > 1) {
+    return { error: `filename spans ${responseIds.length} responses (${responseIds.join(', ')}); put it in a folder named after its response id` };
+  }
+
+  // One filename, several slots. The index cannot say whether those slots hold
+  // the same picture or two different ones, so the file is held rather than
+  // copied into both. Naming it after the slot resolves it.
+  if (hits.length > 1) {
+    const ext = path.extname(hits[0].original_filename).toLowerCase();
+    return { error: `filename fills ${hits.length} slots (${hits.map(h => h.slot).join(', ')}) and cannot say which; rename each copy to <slot>${ext}` };
+  }
+
+  return { hit: hits[0] };
+};
+
 const main = () => {
   if (!fs.existsSync(PATHS.fileIndex)) {
     console.error('file_index.csv is missing. Run build-index.js first.');
+    process.exit(1);
+  }
+  if (!fs.existsSync(dir)) {
+    console.error(`Drop directory not found: ${dir}`);
     process.exit(1);
   }
 
@@ -70,82 +186,92 @@ const main = () => {
     .map(([response_id, slot, original_filename, ext, typeform_hash, expected_bucket]) =>
       ({ response_id, slot, original_filename, ext, typeform_hash, expected_bucket }));
 
-  const dropped = fs.readdirSync(dir).filter(f => !f.startsWith('.') && fs.statSync(path.join(dir, f)).isFile());
+  const dropped = collect(dir);
   if (!dropped.length) {
     console.log(`No files in ${dir}`);
     return;
   }
 
-  const verified = [];
+  let verified = [];
   const quarantined = [];
   const seenHashes = new Map();
 
-  for (const file of dropped) {
-    const full = path.join(dir, file);
+  for (const entry of dropped) {
+    const full = path.join(dir, entry.rel);
     const buf = fs.readFileSync(full);
     const sha = crypto.createHash('sha256').update(buf).digest('hex');
 
-    // 1. Resolve the file against the index. Exact match first, then suffix match
-    //    (upload harnesses prepend an opaque id to the original name).
-    let hits = index.filter(e => e.original_filename === file);
-    if (!hits.length) hits = index.filter(e => file.endsWith(e.original_filename));
-    if (!hits.length) {
-      quarantined.push({ file, sha, reason: 'filename not found in file_index.csv' });
+    // 1. Resolve to exactly one (response, slot).
+    const { hit, error } = resolve(entry, index);
+    if (error) {
+      quarantined.push({ file: entry.rel, sha, reason: error });
       continue;
     }
 
-    // A filename used by one response in several slots is not ambiguous about
-    // WHO it belongs to, only about which slots it fills. Both slots get a copy.
-    const responseIds = [...new Set(hits.map(h => h.response_id))];
-    if (responseIds.length > 1) {
-      quarantined.push({ file, sha, reason: `filename spans ${responseIds.length} responses (${responseIds.join(', ')}), needs manual assignment` });
-      continue;
-    }
-
-    const ext = path.extname(hits[0].original_filename).toLowerCase();
+    const ext = path.extname(hit.original_filename).toLowerCase();
     const sniffed = sniff(buf);
 
     // 2. Bytes must agree with the extension.
     if (!sniffAgrees(sniffed, ext)) {
-      quarantined.push({ file, sha, reason: `content is ${sniffed || 'unrecognised'} but extension is ${ext}` });
+      quarantined.push({ file: entry.rel, sha, reason: `content is ${sniffed || 'unrecognised'} but extension is ${ext}` });
       continue;
     }
 
-    // 3. Same bytes dropped twice under different names.
-    if (seenHashes.has(sha) && seenHashes.get(sha) !== file) {
-      // Legitimate when one response reused a photo across slots; recorded, not rejected.
-      console.log(`note: ${file} is byte-identical to ${seenHashes.get(sha)}`);
+    // 3. Same bytes dropped twice under different names. Legitimate when one
+    //    response genuinely reused a photo across slots; recorded, not rejected.
+    if (seenHashes.has(sha) && seenHashes.get(sha) !== entry.rel) {
+      console.log(`note: ${entry.rel} is byte-identical to ${seenHashes.get(sha)}`);
     }
-    seenHashes.set(sha, file);
+    seenHashes.set(sha, entry.rel);
 
     // 4. Bucket routing.
     const bucket = bucketForExt(ext);
     if (!bucket) {
-      quarantined.push({ file, sha, reason: `no bucket accepts ${ext}` });
+      quarantined.push({ file: entry.rel, sha, reason: `no bucket accepts ${ext}` });
       continue;
     }
 
-    for (const hit of hits) {
-      verified.push({
-        batch: batchNo,
-        response_id: hit.response_id,
-        slot: hit.slot,
-        original_filename: hit.original_filename,
-        local_file: file,
-        sha256: sha,
-        bytes: buf.length,
-        mime: EXT_MIME[ext] || 'application/octet-stream',
-        bucket,
-        storage_path: storagePath(hit.response_id, hit.slot, ext),
-        status: 'verified',
-        notes: hit.slot === 'cv' && !['.pdf', '.doc', '.docx', '.pptx'].includes(ext)
-          ? 'non-document in CV slot, routed to photos bucket'
-          : '',
+    verified.push({
+      batch: batchNo,
+      response_id: hit.response_id,
+      slot: hit.slot,
+      original_filename: hit.original_filename,
+      local_path: entry.rel,
+      sha256: sha,
+      bytes: buf.length,
+      mime: EXT_MIME[ext] || 'application/octet-stream',
+      bucket,
+      storage_path: storagePath(hit.response_id, hit.slot, ext),
+      status: 'verified',
+      notes: hit.slot === 'cv' && !['.pdf', '.doc', '.docx', '.pptx'].includes(ext)
+        ? 'non-document in CV slot, routed to photos bucket'
+        : '',
+    });
+  }
+
+  // 5. No slot claimed twice. Whichever file is right, the tool cannot know, so
+  //    both are held rather than one silently winning.
+  const bySlot = new Map();
+  for (const v of verified) {
+    const key = `${v.response_id}|${v.slot}`;
+    if (!bySlot.has(key)) bySlot.set(key, []);
+    bySlot.get(key).push(v);
+  }
+  const contested = new Set();
+  for (const [key, rows] of bySlot) {
+    if (rows.length < 2) continue;
+    contested.add(key);
+    for (const r of rows) {
+      quarantined.push({
+        file: r.local_path,
+        sha: r.sha256,
+        reason: `slot ${r.slot} of ${r.response_id} is claimed by ${rows.length} files (${rows.map(x => x.local_path).join(', ')})`,
       });
     }
   }
+  verified = verified.filter(v => !contested.has(`${v.response_id}|${v.slot}`));
 
-  // 5. Slot completeness per response.
+  // 6. Slot completeness per response.
   const touched = [...new Set(verified.map(v => v.response_id))];
   const incomplete = [];
   for (const id of touched) {
@@ -158,7 +284,7 @@ const main = () => {
   // ── Report ──────────────────────────────────────────────────────────────────
   console.log(`\nBatch ${batchNo}: ${dropped.length} files dropped, ${verified.length} slot assignments verified, ${quarantined.length} quarantined\n`);
   for (const v of verified) {
-    console.log(`  OK   ${v.response_id}  ${v.slot.padEnd(8)} ${v.local_file}  ->  ${v.bucket}/${v.storage_path}${v.notes ? '  [' + v.notes + ']' : ''}`);
+    console.log(`  OK   ${v.response_id}  ${v.slot.padEnd(8)} ${v.local_path}  ->  ${v.bucket}/${v.storage_path}${v.notes ? '  [' + v.notes + ']' : ''}`);
   }
   for (const q of quarantined) console.log(`  HOLD ${q.file}  ${q.reason}`);
   for (const i of incomplete) console.log(`  GAP  ${i.id} missing slot(s): ${i.missing.join(', ')}`);
@@ -172,11 +298,11 @@ const main = () => {
     process.exit(2);
   }
 
-  const header = ['batch', 'response_id', 'slot', 'original_filename', 'sha256', 'bytes', 'mime', 'bucket', 'storage_path', 'status', 'public_url', 'notes'];
+  const header = ['batch', 'response_id', 'slot', 'original_filename', 'local_path', 'sha256', 'bytes', 'mime', 'bucket', 'storage_path', 'status', 'public_url', 'notes'];
   const existing = fs.existsSync(PATHS.manifest)
     ? parseCsv(fs.readFileSync(PATHS.manifest, 'utf8')).slice(1)
     : [];
-  const rows = verified.map(v => [v.batch, v.response_id, v.slot, v.original_filename, v.sha256, v.bytes, v.mime, v.bucket, v.storage_path, v.status, '', v.notes]);
+  const rows = verified.map(v => [v.batch, v.response_id, v.slot, v.original_filename, v.local_path, v.sha256, v.bytes, v.mime, v.bucket, v.storage_path, v.status, '', v.notes]);
   fs.writeFileSync(PATHS.manifest, toCsv([header, ...existing, ...rows]));
   console.log(`\nmanifest.csv  +${rows.length} rows`);
 };
