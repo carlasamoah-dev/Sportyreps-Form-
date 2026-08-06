@@ -42,7 +42,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { parseCsv, toCsv } = require('./csv');
-const { PATHS, SLOTS, DOC_EXTS, bucketForExt, storagePath, EXT_MIME } = require('./config');
+const { PATHS, SLOTS, DOC_EXTS, IMAGE_EXTS, bucketForExt, storagePath, EXT_MIME } = require('./config');
 
 const args = process.argv.slice(2);
 const argVal = (flag, fallback) => {
@@ -60,6 +60,29 @@ const write = args.includes('--write');
 const relaxed = args.includes('--relaxed');
 
 const SLOT_NAMES = SLOTS.map(s => s.slot);
+
+// What a person writes on a file to say which slot it is. 'full' because the
+// live form labels the front view with full_view.png, 'potrait' because that
+// spelling appears in the source data as often as the correct one.
+const SLOT_WORDS = {
+  cv: 'cv',
+  portrait: 'portrait', potrait: 'portrait',
+  front: 'front', full: 'front',
+  rear: 'rear',
+};
+
+// Longest first, so 'portrait' wins over any shorter word it contains.
+const SLOT_WORD_KEYS = Object.keys(SLOT_WORDS).sort((a, b) => b.length - a.length);
+
+// How firmly a slot was established, lowest wins when two files want one slot.
+// A person putting a file in a slot folder, or writing the slot on it, outranks
+// anything this script inferred on its own.
+const STRENGTH = { layout: 0, named: 1, index: 2, relaxed: 3 };
+
+const slotFromName = (stem) => {
+  const key = SLOT_WORD_KEYS.find(w => stem === w || stem.endsWith(w) || stem.split('-').pop() === w);
+  return key ? SLOT_WORDS[key] : null;
+};
 
 // Magic bytes for the formats present in this export.
 const sniff = (buf) => {
@@ -154,17 +177,19 @@ const resolve = (entry, index) => {
   // 1. Slot stated by the layout.
   if (entry.slot) {
     const hit = rows.find(e => e.slot === entry.slot);
-    return hit ? { hits: [hit] } : { error: `${entry.responseId} has no ${entry.slot} slot in the index` };
+    return hit ? { hits: [hit], strength: STRENGTH.layout } : { error: `${entry.responseId} has no ${entry.slot} slot in the index` };
   }
 
   // 2. Slot stated by the filename itself, with or without a harness prefix
   //    (`front.jpeg`, `c96b7e754eed-front.jpeg`).
   const stem = path.basename(entry.file, path.extname(entry.file)).toLowerCase();
-  const named = SLOT_NAMES.find(s => s === stem || s === stem.split('-').pop());
+  const named = stem === 'cv' || SLOT_NAMES.includes(stem) || SLOT_NAMES.includes(stem.split('-').pop())
+    ? slotFromName(stem)
+    : null;
   if (named) {
     if (!entry.responseId) return { error: `'${entry.file}' names a slot but not a response; put it in a folder named after its response id` };
     const hit = rows.find(e => e.slot === named);
-    return hit ? { hits: [hit] } : { error: `${entry.responseId} has no ${named} slot in the index` };
+    return hit ? { hits: [hit], strength: STRENGTH.named } : { error: `${entry.responseId} has no ${named} slot in the index` };
   }
 
   // 3. Fall back to the original filename. Exact match first, then suffix match
@@ -178,7 +203,34 @@ const resolve = (entry, index) => {
     const ext = path.extname(entry.file).toLowerCase();
     const cv = rows.find(e => e.slot === 'cv');
     if (DOC_EXTS.includes(ext) && cv && DOC_EXTS.includes(cv.ext)) {
-      return { hits: [cv], note: `matched to cv by file type, name does not match '${cv.original_filename}' (--relaxed)` };
+      return { hits: [cv], strength: STRENGTH.relaxed, note: `matched to cv by file type, name does not match '${cv.original_filename}' (--relaxed)` };
+    }
+  }
+  // 3c. The filename is not in the index, but it ends in a slot word: someone
+  //     renamed the file to say which slot it is. Trust that, since the folder
+  //     already settles who it belongs to.
+  if (!hits.length && entry.responseId) {
+    const appended = slotFromName(stem);
+    const hit = appended && rows.find(e => e.slot === appended);
+    if (hit) {
+      // Strip the appended word and see whether the export knows the original
+      // name. If it does, the two readings must agree. A disagreement is a real
+      // question about the data and is put to the operator rather than settled
+      // here, either way round.
+      const word = SLOT_WORD_KEYS.find(w => stem.endsWith(w));
+      const base = stem.slice(0, stem.length - word.length) + path.extname(entry.file);
+      const known = rows.filter(e => e.original_filename.toLowerCase() === base.toLowerCase()
+        || base.toLowerCase().endsWith(e.original_filename.toLowerCase()));
+
+      if (known.length && !known.some(e => e.slot === appended)) {
+        return { error: `the name says ${appended}, but the export records '${known[0].original_filename}' as ${known.map(e => e.slot).join(' and ')}. `
+          + `Rename it to '${appended}${path.extname(entry.file)}' to insist on ${appended}, or to '${known[0].slot}${path.extname(entry.file)}' to go with the export` };
+      }
+      return {
+        hits: [hit],
+        strength: STRENGTH.named,
+        note: known.length ? `slot ${appended} read from the name, agrees with the export` : `slot ${appended} read from the name '${entry.file}', which is not in the index`,
+      };
     }
   }
   if (!hits.length) return { error: 'filename not found in file_index.csv' };
@@ -193,13 +245,13 @@ const resolve = (entry, index) => {
   // copied into both. Naming it after the slot resolves it.
   if (hits.length > 1) {
     if (relaxed) {
-      return { hits, note: `one file filling ${hits.length} slots: ${hits.map(h => h.slot).join(', ')} (--relaxed)` };
+      return { hits, strength: STRENGTH.relaxed, note: `one file filling ${hits.length} slots: ${hits.map(h => h.slot).join(', ')} (--relaxed)` };
     }
     const ext = path.extname(hits[0].original_filename).toLowerCase();
     return { error: `filename fills ${hits.length} slots (${hits.map(h => h.slot).join(', ')}) and cannot say which; rename each copy to <slot>${ext}` };
   }
 
-  return { hits };
+  return { hits, strength: STRENGTH.index };
 };
 
 const main = () => {
@@ -232,7 +284,7 @@ const main = () => {
     // 1. Resolve to exactly one (response, slot). This happens before the bytes
     //    are read, because an unexpected directory resolves to a hold and has no
     //    bytes to read.
-    const { hits, note, error } = resolve(entry, index);
+    const { hits, note, strength, error } = resolve(entry, index);
     if (error && entry.notASlot) {
       quarantined.push({ file: entry.rel, sha: '', reason: error });
       continue;
@@ -247,13 +299,23 @@ const main = () => {
     }
 
     // Every hit shares one filename, so one extension covers them all.
-    const ext = path.extname(hits[0].original_filename).toLowerCase();
+    let ext = path.extname(hits[0].original_filename).toLowerCase();
     const sniffed = sniff(buf);
+    let extNote = '';
 
-    // 2. Bytes must agree with the extension.
+    // 2. Bytes must agree with the extension. A phone that saved a JPEG under a
+    //    .png name is harmless once the real type is used for the upload, so
+    //    --relaxed keeps it and routes by what the bytes actually are.
     if (!sniffAgrees(sniffed, ext)) {
-      quarantined.push({ file: entry.rel, sha, reason: `content is ${sniffed || 'unrecognised'} but extension is ${ext}` });
-      continue;
+      const sameFamily = sniffed
+        && ((IMAGE_EXTS.includes(sniffed) && IMAGE_EXTS.includes(ext))
+          || (DOC_EXTS.includes(sniffed) && DOC_EXTS.includes(ext)));
+      if (!relaxed || !sameFamily) {
+        quarantined.push({ file: entry.rel, sha, reason: `content is ${sniffed || 'unrecognised'} but extension is ${ext}` });
+        continue;
+      }
+      extNote = `named ${ext} but the bytes are ${sniffed}, stored as ${sniffed} (--relaxed)`;
+      ext = sniffed;
     }
 
     // 3. Same bytes dropped twice under different names. Legitimate when one
@@ -275,6 +337,7 @@ const main = () => {
     for (const hit of hits) {
       const reasons = [];
       if (note) reasons.push(note);
+      if (extNote) reasons.push(extNote);
       if (hit.slot === 'cv' && !DOC_EXTS.includes(ext)) {
         reasons.push('non-document in CV slot, routed to photos bucket');
       }
@@ -290,6 +353,7 @@ const main = () => {
         bucket,
         storage_path: storagePath(hit.response_id, hit.slot, ext),
         status: 'verified',
+        strength,
         notes: reasons.join('; '),
       });
     }
@@ -304,9 +368,31 @@ const main = () => {
     bySlot.get(key).push(v);
   }
   const contested = new Set();
+  const superseded = new Set();
   for (const [key, rows] of bySlot) {
     if (rows.length < 2) continue;
     if (new Set(rows.map(r => r.local_path)).size === 1) continue;   // same file, several slots
+
+    // Two copies of the same bytes under different names is not a conflict about
+    // which file belongs here, only about which copy to send. Keep one.
+    if (new Set(rows.map(r => r.sha256)).size === 1) {
+      for (const r of rows.slice(1)) superseded.add(r);
+      rows[0].notes = [rows[0].notes, `${rows.length} identical copies dropped, one uploaded`].filter(Boolean).join('; ');
+      continue;
+    }
+
+    // Different files, but not equally entitled to the slot. A file put here by
+    // a person outranks one this script inferred, so the weaker claims give way
+    // instead of the whole slot being held.
+    const best = Math.min(...rows.map(r => r.strength));
+    const winners = rows.filter(r => r.strength === best);
+    if (winners.length === 1) {
+      const losers = rows.filter(r => r !== winners[0]);
+      for (const r of losers) superseded.add(r);
+      winners[0].notes = [winners[0].notes,
+        `kept over ${losers.length} weaker claim(s) to this slot`].filter(Boolean).join('; ');
+      continue;
+    }
     contested.add(key);
     for (const r of rows) {
       quarantined.push({
@@ -316,7 +402,7 @@ const main = () => {
       });
     }
   }
-  verified = verified.filter(v => !contested.has(`${v.response_id}|${v.slot}`));
+  verified = verified.filter(v => !superseded.has(v) && !contested.has(`${v.response_id}|${v.slot}`));
 
   // 6. Slot completeness per response.
   const touched = [...new Set(verified.map(v => v.response_id))];
