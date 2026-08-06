@@ -56,8 +56,8 @@ of it and lives in Supabase where it can be deleted on request.
 
 ## One-time setup
 
-1. In the Supabase SQL Editor, run `migration/sql/002_storage_buckets.sql` and
-   `migration/sql/003_submission_columns.sql`, **separately**. Together they are
+1. In the Supabase SQL Editor, run `migration/sql/002_storage_buckets.sql`,
+   `003_submission_columns.sql` and `004_minor_flags.sql`, **separately**. Together they are
    what 001 was, split in two because the editor treats a script as one
    transaction: 001 ends with policy statements that need ownership of
    `storage.objects`, and where a project refuses those, the bucket and column
@@ -144,17 +144,24 @@ insert upserts on `source_response_id`.
 These are set in `scripts/config.js` under `POLICY` and are deliberately
 conservative. Change them there, not in the transform code.
 
-- `excludeMinors: true`. Twelve records are under 18 at submission, including a
-  12 and a 13 year old who submitted as talents. The live form ends the journey
-  for under-18s, so importing them would contradict the product's own gate.
-  Flip the flag to import them anyway.
+- `excludeMinors: false`. Eleven records are under 18 at submission, aged 12 to
+  17. The live form ends the journey for under-18s, so the first pass left them
+  out on that basis. They are now imported, because those responses were
+  completed by guardians on the players' behalf, which is a different situation
+  from a child filling the form in unsupervised.
 
-  Note what this does not do on its own. Files are uploaded before the transform
-  runs, so it does not yet know who policy will exclude, and the photographs and
-  CVs of those eleven go up regardless. They then sit in public buckets attached
-  to no record. `prune-excluded.js` reports them and, with `--delete`, removes
-  them. It reads the exclusion list the transform writes, so it can only ever
-  touch responses that were deliberately left out.
+  That decision adds a duty rather than removing one, so `sql/004` gives every
+  imported row `is_minor_at_submission`, `age_at_submission` and
+  `guardian_on_record`, filled for adults too so that `false` means checked.
+  Without them, anyone meeting these records later would reasonably assume every
+  player is an adult, since the live form admits nobody else.
+
+  If you set this back to `true`, note that files are uploaded before the
+  transform runs, so the excluded players' photographs and CVs go up regardless
+  and then sit in public buckets attached to no record. `prune-excluded.js`
+  reports them and, with `--delete`, removes them. It reads the exclusion list
+  the transform writes, so it can only ever touch responses deliberately left
+  out.
 - Height, speed, education and position all carry unresolvable ambiguity in the
   source. The transform maps what it safely can, nulls the rest, and records
   every decision in `review_flags.csv` rather than inventing a value.

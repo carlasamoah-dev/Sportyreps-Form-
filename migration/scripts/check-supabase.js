@@ -122,6 +122,21 @@ const main = async () => {
     });
   }
 
+  // Checked separately so a missing 004 does not read as a missing 003. Every
+  // imported row carries these, so without them the insert fails for all of
+  // them, not just the eleven minors.
+  const { error: minorColError } = await supabase
+    .from('submissions')
+    .select('is_minor_at_submission, age_at_submission, guardian_on_record')
+    .limit(1);
+
+  if (minorColError) {
+    problems.push({
+      what: `the submissions table cannot record who was under 18 (${minorColError.message})`,
+      fix: '004_minor_flags.sql',
+    });
+  }
+
   // ── Report ──────────────────────────────────────────────────────────────────
   if (!problems.length) {
     console.log('Supabase is ready: buckets accept every file type in this export, and the submissions table has the columns.');
