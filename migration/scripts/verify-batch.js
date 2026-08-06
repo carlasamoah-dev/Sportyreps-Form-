@@ -122,6 +122,11 @@ const collect = (root) => {
  * the filename, which for 11 of the 50 responses cannot tell two slots apart.
  */
 const resolve = (entry, index) => {
+  // A folder of player folders, dropped whole. Common enough to be worth naming
+  // precisely: the generic message sends people looking for the wrong problem.
+  if (entry.notASlot && index.some(e => e.response_id === entry.file)) {
+    return { error: `'${entry.responseId}' is a wrapper folder, '${entry.file}' inside it is the player. Copy the player folders themselves into the drop folder, not the folder holding them` };
+  }
   if (entry.notASlot) {
     return { error: `'${entry.file}' is neither a file nor one of ${SLOT_NAMES.join('/')}` };
   }
@@ -198,11 +203,19 @@ const main = () => {
 
   for (const entry of dropped) {
     const full = path.join(dir, entry.rel);
+
+    // 1. Resolve to exactly one (response, slot). This happens before the bytes
+    //    are read, because an unexpected directory resolves to a hold and has no
+    //    bytes to read.
+    const { hit, error } = resolve(entry, index);
+    if (error && entry.notASlot) {
+      quarantined.push({ file: entry.rel, sha: '', reason: error });
+      continue;
+    }
+
     const buf = fs.readFileSync(full);
     const sha = crypto.createHash('sha256').update(buf).digest('hex');
 
-    // 1. Resolve to exactly one (response, slot).
-    const { hit, error } = resolve(entry, index);
     if (error) {
       quarantined.push({ file: entry.rel, sha, reason: error });
       continue;
