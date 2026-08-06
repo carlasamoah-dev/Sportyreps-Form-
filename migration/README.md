@@ -148,6 +148,13 @@ conservative. Change them there, not in the transform code.
   12 and a 13 year old who submitted as talents. The live form ends the journey
   for under-18s, so importing them would contradict the product's own gate.
   Flip the flag to import them anyway.
+
+  Note what this does not do on its own. Files are uploaded before the transform
+  runs, so it does not yet know who policy will exclude, and the photographs and
+  CVs of those eleven go up regardless. They then sit in public buckets attached
+  to no record. `prune-excluded.js` reports them and, with `--delete`, removes
+  them. It reads the exclusion list the transform writes, so it can only ever
+  touch responses that were deliberately left out.
 - Height, speed, education and position all carry unresolvable ambiguity in the
   source. The transform maps what it safely can, nulls the rest, and records
   every decision in `review_flags.csv` rather than inventing a value.

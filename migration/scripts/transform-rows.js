@@ -11,6 +11,7 @@
  *
  * Output (both gitignored, they contain personal data):
  *   migration/out/payloads.json     one object per response, keyed by response id
+ *   migration/out/excluded.json     response id -> why it was left out
  *   migration/review_flags.csv      response_id, field, issue, raw value
  *
  * Usage:  SOURCE_CSV=/path/to/responses.csv node migration/scripts/transform-rows.js
@@ -253,6 +254,12 @@ const main = () => {
 
   fs.mkdirSync(PATHS.out, { recursive: true });
   fs.writeFileSync(`${PATHS.out}/payloads.json`, JSON.stringify(payloads, null, 2));
+
+  // Why each absent response is absent. Without this the next step cannot tell a
+  // response left out on purpose from one that failed to transform, and treats a
+  // deliberate policy decision as an unresolved problem.
+  fs.writeFileSync(`${PATHS.out}/excluded.json`,
+    JSON.stringify(Object.fromEntries(skipped.map(s => [s.id, s.reason])), null, 2));
   fs.writeFileSync(PATHS.reviewFlags, toCsv([['response_id', 'field', 'issue', 'raw_value'], ...flags]));
 
   console.log(`payloads      ${Object.keys(payloads).length} responses ready`);
