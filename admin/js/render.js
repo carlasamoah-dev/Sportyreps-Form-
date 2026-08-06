@@ -139,6 +139,16 @@ export function renderColumnList() {
         <svg width="16" height="16" viewBox="0 0 24 24" style="color:var(--text-disabled);flex-shrink:0;"><circle cx="9" cy="6" r="1.5" fill="currentColor"></circle><circle cx="15" cy="6" r="1.5" fill="currentColor"></circle><circle cx="9" cy="12" r="1.5" fill="currentColor"></circle><circle cx="15" cy="12" r="1.5" fill="currentColor"></circle><circle cx="9" cy="18" r="1.5" fill="currentColor"></circle><circle cx="15" cy="18" r="1.5" fill="currentColor"></circle></svg>
         <span style="flex:1;font-size:13.5px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-left:8px;">${esc(col.label)}</span>
         ${autoHideBadge}
+        <span class="col-move" role="group" aria-label="Move ${esc(col.label)}">
+          <button class="btn-text move-col-btn" draggable="false" data-dir="-1" data-index="${index}"
+                  title="Move up" aria-label="Move ${esc(col.label)} up" ${index === 0 ? 'disabled' : ''}>
+            <svg width="13" height="13" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </button>
+          <button class="btn-text move-col-btn" draggable="false" data-dir="1" data-index="${index}"
+                  title="Move down" aria-label="Move ${esc(col.label)} down" ${index === state.columns.length - 1 ? 'disabled' : ''}>
+            <svg width="13" height="13" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </button>
+        </span>
         <button class="btn-text toggle-col-btn" draggable="false" data-id="${col.id}" style="width:30px;height:30px;padding:0;color:var(--text-muted);">
           ${col.visible ?
             `<svg width="17" height="17" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"></path><circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" stroke-width="1.7"></circle></svg>` :
