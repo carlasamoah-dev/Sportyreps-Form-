@@ -57,7 +57,8 @@ of it and lives in Supabase where it can be deleted on request.
 ## One-time setup
 
 1. In the Supabase SQL Editor, run `migration/sql/002_storage_buckets.sql`,
-   `003_submission_columns.sql` and `004_minor_flags.sql`, **separately**. Together they are
+   `003_submission_columns.sql`, `004_minor_flags.sql` and, on a project that
+   already ran an earlier `003`, `005_fix_source_index.sql`, **separately**. Together they are
    what 001 was, split in two because the editor treats a script as one
    transaction: 001 ends with policy statements that need ownership of
    `storage.objects`, and where a project refuses those, the bucket and column
