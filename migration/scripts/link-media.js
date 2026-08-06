@@ -126,6 +126,15 @@ const main = async () => {
 
   if (error) {
     console.error(`insert failed: ${error.message}`);
+
+    // This one is worth naming, because the message describes a missing
+    // constraint that is in fact present, just partial and therefore unusable
+    // for an upsert issued through PostgREST.
+    if (/ON CONFLICT/i.test(error.message)) {
+      console.error('\nThe uniqueness on source_response_id exists but is a partial index, which');
+      console.error('an upsert cannot use. Run migration/sql/005_fix_source_index.sql in the');
+      console.error('Supabase SQL Editor, then run this again. Nothing has been written.');
+    }
     process.exit(1);
   }
   console.log(`inserted ${ready.length} rows (upsert on source_response_id)`);

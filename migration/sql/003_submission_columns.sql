@@ -20,9 +20,13 @@ ALTER TABLE public.submissions
     ADD COLUMN IF NOT EXISTS source_network_id   text,
     ADD COLUMN IF NOT EXISTS source_media        jsonb;
 
+-- Not partial. A partial unique index cannot satisfy the ON CONFLICT the import
+-- uses unless the statement repeats the predicate, which PostgREST cannot do.
+-- The predicate bought nothing anyway: Postgres treats NULLs as distinct, so a
+-- plain unique index still allows any number of rows with no source_response_id,
+-- which is every submission that came through the live form.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_submissions_source_response_id
-    ON public.submissions (source_response_id)
- WHERE source_response_id IS NOT NULL;
+    ON public.submissions (source_response_id);
 
 
 -- ── Columns the app already expects ───────────────────────────────────────────
