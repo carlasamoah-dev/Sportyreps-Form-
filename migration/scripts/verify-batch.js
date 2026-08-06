@@ -31,13 +31,18 @@
  * with status=verified. Quarantined files are listed with the reason.
  *
  * Usage:  node migration/scripts/verify-batch.js --batch 1 [--dir migration/incoming] [--write]
+ *
+ * --relaxed loosens two rules when the export's own ambiguity would otherwise
+ * block a drop: a file whose name matches several slots fills all of them, and a
+ * document with no name match is taken as that player's CV. Both are recorded in
+ * the report and in the manifest notes, so every relaxed decision stays visible.
  */
 
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { parseCsv, toCsv } = require('./csv');
-const { PATHS, SLOTS, bucketForExt, storagePath, EXT_MIME } = require('./config');
+const { PATHS, SLOTS, DOC_EXTS, bucketForExt, storagePath, EXT_MIME } = require('./config');
 
 const args = process.argv.slice(2);
 const argVal = (flag, fallback) => {
@@ -47,6 +52,12 @@ const argVal = (flag, fallback) => {
 const batchNo = argVal('--batch', '0');
 const dir = argVal('--dir', PATHS.incoming);
 const write = args.includes('--write');
+
+// Opt-in, because both behaviours trade a guarantee for progress:
+//   - one file fills every slot its name matches, instead of being held
+//   - a document lands in the CV slot on file type alone, without a name match
+// Every relaxed decision is printed and recorded in the manifest notes.
+const relaxed = args.includes('--relaxed');
 
 const SLOT_NAMES = SLOTS.map(s => s.slot);
 
@@ -116,7 +127,8 @@ const collect = (root) => {
 };
 
 /**
- * Decide which index row a dropped file is. Returns { hit } or { error }.
+ * Decide which index rows a dropped file is. Returns { hits } or { error }, and
+ * optionally a note recording any judgement call it had to make.
  *
  * The order matters: a slot stated by the layout is a human assertion and beats
  * the filename, which for 11 of the 50 responses cannot tell two slots apart.
@@ -142,7 +154,7 @@ const resolve = (entry, index) => {
   // 1. Slot stated by the layout.
   if (entry.slot) {
     const hit = rows.find(e => e.slot === entry.slot);
-    return hit ? { hit } : { error: `${entry.responseId} has no ${entry.slot} slot in the index` };
+    return hit ? { hits: [hit] } : { error: `${entry.responseId} has no ${entry.slot} slot in the index` };
   }
 
   // 2. Slot stated by the filename itself, with or without a harness prefix
@@ -152,13 +164,23 @@ const resolve = (entry, index) => {
   if (named) {
     if (!entry.responseId) return { error: `'${entry.file}' names a slot but not a response; put it in a folder named after its response id` };
     const hit = rows.find(e => e.slot === named);
-    return hit ? { hit } : { error: `${entry.responseId} has no ${named} slot in the index` };
+    return hit ? { hits: [hit] } : { error: `${entry.responseId} has no ${named} slot in the index` };
   }
 
   // 3. Fall back to the original filename. Exact match first, then suffix match
   //    (upload harnesses prepend an opaque id to the original name).
   let hits = rows.filter(e => e.original_filename === entry.file);
   if (!hits.length) hits = rows.filter(e => entry.file.endsWith(e.original_filename));
+  // 3b. No name match. A document in a player's folder is almost certainly that
+  //     player's CV, so with --relaxed it is accepted on file type alone, but
+  //     only when the export also recorded a document in that CV slot.
+  if (!hits.length && relaxed && entry.responseId) {
+    const ext = path.extname(entry.file).toLowerCase();
+    const cv = rows.find(e => e.slot === 'cv');
+    if (DOC_EXTS.includes(ext) && cv && DOC_EXTS.includes(cv.ext)) {
+      return { hits: [cv], note: `matched to cv by file type, name does not match '${cv.original_filename}' (--relaxed)` };
+    }
+  }
   if (!hits.length) return { error: 'filename not found in file_index.csv' };
 
   const responseIds = [...new Set(hits.map(h => h.response_id))];
@@ -170,11 +192,14 @@ const resolve = (entry, index) => {
   // the same picture or two different ones, so the file is held rather than
   // copied into both. Naming it after the slot resolves it.
   if (hits.length > 1) {
+    if (relaxed) {
+      return { hits, note: `one file filling ${hits.length} slots: ${hits.map(h => h.slot).join(', ')} (--relaxed)` };
+    }
     const ext = path.extname(hits[0].original_filename).toLowerCase();
     return { error: `filename fills ${hits.length} slots (${hits.map(h => h.slot).join(', ')}) and cannot say which; rename each copy to <slot>${ext}` };
   }
 
-  return { hit: hits[0] };
+  return { hits };
 };
 
 const main = () => {
@@ -207,7 +232,7 @@ const main = () => {
     // 1. Resolve to exactly one (response, slot). This happens before the bytes
     //    are read, because an unexpected directory resolves to a hold and has no
     //    bytes to read.
-    const { hit, error } = resolve(entry, index);
+    const { hits, note, error } = resolve(entry, index);
     if (error && entry.notASlot) {
       quarantined.push({ file: entry.rel, sha: '', reason: error });
       continue;
@@ -221,7 +246,8 @@ const main = () => {
       continue;
     }
 
-    const ext = path.extname(hit.original_filename).toLowerCase();
+    // Every hit shares one filename, so one extension covers them all.
+    const ext = path.extname(hits[0].original_filename).toLowerCase();
     const sniffed = sniff(buf);
 
     // 2. Bytes must agree with the extension.
@@ -244,22 +270,29 @@ const main = () => {
       continue;
     }
 
-    verified.push({
-      batch: batchNo,
-      response_id: hit.response_id,
-      slot: hit.slot,
-      original_filename: hit.original_filename,
-      local_path: entry.rel,
-      sha256: sha,
-      bytes: buf.length,
-      mime: EXT_MIME[ext] || 'application/octet-stream',
-      bucket,
-      storage_path: storagePath(hit.response_id, hit.slot, ext),
-      status: 'verified',
-      notes: hit.slot === 'cv' && !['.pdf', '.doc', '.docx', '.pptx'].includes(ext)
-        ? 'non-document in CV slot, routed to photos bucket'
-        : '',
-    });
+    // Normally one row. With --relaxed a single file can fill several slots, in
+    // which case the same bytes are uploaded once per slot under its own path.
+    for (const hit of hits) {
+      const reasons = [];
+      if (note) reasons.push(note);
+      if (hit.slot === 'cv' && !DOC_EXTS.includes(ext)) {
+        reasons.push('non-document in CV slot, routed to photos bucket');
+      }
+      verified.push({
+        batch: batchNo,
+        response_id: hit.response_id,
+        slot: hit.slot,
+        original_filename: hit.original_filename,
+        local_path: entry.rel,
+        sha256: sha,
+        bytes: buf.length,
+        mime: EXT_MIME[ext] || 'application/octet-stream',
+        bucket,
+        storage_path: storagePath(hit.response_id, hit.slot, ext),
+        status: 'verified',
+        notes: reasons.join('; '),
+      });
+    }
   }
 
   // 5. No slot claimed twice. Whichever file is right, the tool cannot know, so
@@ -273,6 +306,7 @@ const main = () => {
   const contested = new Set();
   for (const [key, rows] of bySlot) {
     if (rows.length < 2) continue;
+    if (new Set(rows.map(r => r.local_path)).size === 1) continue;   // same file, several slots
     contested.add(key);
     for (const r of rows) {
       quarantined.push({

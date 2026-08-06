@@ -18,6 +18,8 @@
  *   --dir <path>   where the dropped folders are (default migration/incoming)
  *   --dry          rehearse everything, upload nothing, write nothing
  *   --media-only   stop after the files are uploaded, skip the database rows
+ *   --relaxed      let one file fill every slot its name matches, and take a
+ *                  document as the CV when no filename matches
  */
 
 const fs = require('fs');
@@ -36,6 +38,9 @@ const batch = argVal('--batch', positional);
 const dir = argVal('--dir', PATHS.incoming);
 const dry = args.includes('--dry');
 const mediaOnly = args.includes('--media-only');
+// Passed straight through to the checker. See verify-batch.js for what it loosens.
+const relaxed = args.includes('--relaxed');
+const verifyArgs = relaxed ? ['--relaxed'] : [];
 
 const SCRIPTS = path.join(__dirname, 'scripts');
 const ENV_FILE = path.join(__dirname, '..', 'backend', '.env');
@@ -151,7 +156,7 @@ const main = async () => {
 
   // ── 1. Check the files ──────────────────────────────────────────────────────
   banner('STEP 1 of 4  Checking the files. Nothing is uploaded yet.');
-  const checked = run('verify-batch.js', ['--batch', batch, '--dir', dir]);
+  const checked = run('verify-batch.js', ['--batch', batch, '--dir', dir, ...verifyArgs]);
   if (checked === 3) {
     stop([
       'Some files are not sorted out yet. In the report above:',
@@ -180,7 +185,7 @@ const main = async () => {
 
   // Recording the check is what makes the batch resumable, so it happens before
   // anything leaves the machine.
-  if (run('verify-batch.js', ['--batch', batch, '--dir', dir, '--write']) !== 0) {
+  if (run('verify-batch.js', ['--batch', batch, '--dir', dir, '--write', ...verifyArgs]) !== 0) {
     stop('Refused to record the batch because something is still on hold above.\nFix those files and run this command again. Nothing has been uploaded.');
   }
 
