@@ -70,7 +70,26 @@ of it and lives in Supabase where it can be deleted on request.
 
 ## The batch loop
 
-For each batch listed in `batches.md`:
+Everything below runs on the machine that holds the media. The files go straight
+from that disk to Supabase; nothing about this migration works remotely, because
+nothing else can see the files.
+
+One command does a whole batch, stopping at each gate:
+
+```bash
+node migration/run-batch.js 1
+
+node migration/run-batch.js 1 --dry          # rehearse, change nothing
+node migration/run-batch.js 1 --media-only   # upload the files, skip the rows
+```
+
+It refuses to go past a HOLD, asks before uploading and again before writing to
+the database, and is safe to re-run: an interrupted batch resumes where it
+stopped. Credentials come from the environment, then `backend/.env`, and are
+only prompted for as a last resort.
+
+The individual steps below are what it runs, and are still the way to drive a
+batch by hand:
 
 ```bash
 # 1. drop the batch's files into migration/incoming/{response_id}/

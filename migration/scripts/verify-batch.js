@@ -289,7 +289,13 @@ const main = () => {
   for (const q of quarantined) console.log(`  HOLD ${q.file}  ${q.reason}`);
   for (const i of incomplete) console.log(`  GAP  ${i.id} missing slot(s): ${i.missing.join(', ')}`);
 
+  // Exit 3 rather than 0 when the dry run found something, so a wrapper can tell
+  // "checked, all clean" from "checked, needs a human" without parsing the report.
   if (!write) {
+    if (quarantined.length || incomplete.length) {
+      console.log('\nDry run. Resolve the HOLD/GAP lines above, then run this again.');
+      process.exit(3);
+    }
     console.log('\nDry run. Re-run with --write to append these rows to manifest.csv.');
     return;
   }
