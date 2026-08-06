@@ -874,3 +874,26 @@ input[type="checkbox"] {
   border-color: #f59e0b;
   color: #b45309;
 }
+
+/* ── Reordering columns ────────────────────────────────────────────────────
+   The tile being carried, and a line showing where it will land. Without the
+   line the drag gives no indication of the result until it is dropped. */
+.column-item {
+  cursor: grab;
+  border-top: 2px solid transparent;
+  border-bottom: 2px solid transparent;
+}
+
+.column-item:active { cursor: grabbing; }
+
+.column-item.dragging {
+  opacity: .45;
+  background: var(--bg-subtle, #f8fafc);
+}
+
+.column-item.drop-before { border-top-color: #7c3aed; }
+.column-item.drop-after  { border-bottom-color: #7c3aed; }
+
+/* The eye toggle sits inside a draggable tile, so it must not start a drag when
+   what the pointer is actually doing is pressing a button. */
+.column-item .toggle-col-btn { cursor: pointer; }

@@ -137,9 +137,9 @@ export function renderColumnList() {
     html += `
       <div class="column-item" draggable="true" data-index="${index}">
         <svg width="16" height="16" viewBox="0 0 24 24" style="color:var(--text-disabled);flex-shrink:0;"><circle cx="9" cy="6" r="1.5" fill="currentColor"></circle><circle cx="15" cy="6" r="1.5" fill="currentColor"></circle><circle cx="9" cy="12" r="1.5" fill="currentColor"></circle><circle cx="15" cy="12" r="1.5" fill="currentColor"></circle><circle cx="9" cy="18" r="1.5" fill="currentColor"></circle><circle cx="15" cy="18" r="1.5" fill="currentColor"></circle></svg>
-        <span style="flex:1;font-size:13.5px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-left:8px;">${col.label}</span>
+        <span style="flex:1;font-size:13.5px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-left:8px;">${esc(col.label)}</span>
         ${autoHideBadge}
-        <button class="btn-text toggle-col-btn" data-id="${col.id}" style="width:30px;height:30px;padding:0;color:var(--text-muted);">
+        <button class="btn-text toggle-col-btn" draggable="false" data-id="${col.id}" style="width:30px;height:30px;padding:0;color:var(--text-muted);">
           ${col.visible ?
             `<svg width="17" height="17" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"></path><circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" stroke-width="1.7"></circle></svg>` :
             `<svg width="17" height="17" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 10.7a2 2 0 0 0 2.8 2.8M9.4 5.2A9.4 9.4 0 0 1 12 5c5 0 9 4.5 9 7 0 1-1 2.6-2.6 4M6.3 6.8C4 8.2 3 10 3 12c0 2 4 7 9 7 1.2 0 2.3-.2 3.3-.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path></svg>`
