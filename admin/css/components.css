@@ -698,3 +698,79 @@ input[type="checkbox"] {
   justify-content: space-between;
   margin-top: 4px;
 }
+
+/* ── Hiding summary cards ──────────────────────────────────────────────────
+   The header is a column flex, so the control is taken out of flow rather than
+   added as a row: it must not push the title or change the card's height. */
+.summary-card-header {
+  position: relative;
+  padding-right: 28px;
+}
+
+.card-hide-btn {
+  position: absolute;
+  top: -2px;
+  right: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted, #6b7280);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .12s ease, background .12s ease, color .12s ease;
+}
+
+/* Visible on hover, but always reachable by keyboard rather than hover-only. */
+.summary-card:hover .card-hide-btn,
+.card-hide-btn:focus-visible {
+  opacity: 1;
+}
+
+.card-hide-btn:hover {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.summary-hidden-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  padding: 10px 14px;
+  border: 1px dashed var(--border, #e5e7eb);
+  border-radius: 10px;
+  background: var(--surface-muted, #fafafa);
+}
+
+.summary-hidden-count {
+  font-size: 13px;
+  color: var(--text-muted, #6b7280);
+}
+
+.summary-restore-btn,
+.summary-restore-all {
+  padding: 4px 10px;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--text, #1f2328);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.summary-restore-btn:hover,
+.summary-restore-all:hover {
+  border-color: #7c3aed;
+  color: #7c3aed;
+}
+
+.summary-restore-all {
+  margin-left: auto;
+  font-weight: 600;
+}

@@ -9,7 +9,45 @@ import { COLUMNS } from './constants.js';
  */
 const META_COLUMN_IDS = ['created_at', 'response_type'];
 
+/**
+ * Cards the admin has hidden on the summary page.
+ *
+ * Keyed by a slug of the question title rather than its position, so inserting
+ * a new question later does not silently unhide one card and hide another.
+ *
+ * Unlike column visibility, which is session-only, this is written to
+ * localStorage: hiding a card is a statement about what you never want to see,
+ * not about this sitting.
+ */
+const HIDDEN_CARDS_KEY = 'sr.admin.hiddenSummaryCards';
+
+export const cardKey = (title) => String(title)
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, '-')
+  .replace(/^-+|-+$/g, '');
+
+const loadHiddenCards = () => {
+  try {
+    const raw = localStorage.getItem(HIDDEN_CARDS_KEY);
+    return new Set(raw ? JSON.parse(raw) : []);
+  } catch (_) {
+    return new Set();   // corrupt or unavailable storage should not break the page
+  }
+};
+
+export function saveHiddenCards() {
+  try {
+    localStorage.setItem(HIDDEN_CARDS_KEY, JSON.stringify([...state.hiddenSummaryCards]));
+  } catch (_) {
+    /* private browsing, quota, or storage disabled: the hide still works for this session */
+  }
+}
+
 export const state = {
+  // key -> hidden. Titles are kept alongside so the restore control can name
+  // what it is bringing back without re-rendering every card first.
+  hiddenSummaryCards: loadHiddenCards(),
+  hiddenSummaryTitles: new Map(),
   submissions: [],
   filteredSubmissions: [],
   // `visible`     → manual hide flag (admin choice, persisted across the session)
