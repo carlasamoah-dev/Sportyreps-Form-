@@ -1,4 +1,4 @@
-import { state, recomputeAutoHide, saveHiddenCards } from './state.js';
+import { state, recomputeAutoHide, saveHiddenCards, saveColumnOrder, clearColumnOrder } from './state.js';
 import { escapeHtml as esc } from './utils.js';
 import { SVGS } from './constants.js';
 import { renderTable, renderColumnList, renderDrawer, renderSummary } from './render.js';
@@ -439,7 +439,79 @@ export function setupGlobalListeners() {
     }
   });
 
+  // ── Reordering columns by dragging ──────────────────────────────────────────
+  // The tiles were already marked draggable, so they lifted, but nothing
+  // listened for the drop and the order never changed. These are the missing
+  // handlers.
+  const columnList = document.getElementById("column-list");
+  let dragFrom = null;
+
+  const clearDropMarks = () => {
+    columnList?.querySelectorAll('.drop-before, .drop-after')
+      .forEach(n => n.classList.remove('drop-before', 'drop-after'));
+  };
+
+  columnList?.addEventListener("dragstart", (e) => {
+    const item = e.target.closest(".column-item");
+    if (!item) return;
+    dragFrom = Number(item.getAttribute("data-index"));
+    item.classList.add("dragging");
+    e.dataTransfer.effectAllowed = "move";
+    // Firefox refuses to start a drag unless some data is set.
+    e.dataTransfer.setData("text/plain", String(dragFrom));
+  });
+
+  columnList?.addEventListener("dragover", (e) => {
+    if (dragFrom === null) return;
+    e.preventDefault();                       // without this the drop never fires
+    e.dataTransfer.dropEffect = "move";
+
+    const over = e.target.closest(".column-item");
+    clearDropMarks();
+    if (!over || Number(over.getAttribute("data-index")) === dragFrom) return;
+
+    // Which half of the tile the pointer is over decides above or below, so the
+    // line shows where the column will actually land.
+    const box = over.getBoundingClientRect();
+    over.classList.add(e.clientY > box.top + box.height / 2 ? "drop-after" : "drop-before");
+  });
+
+  columnList?.addEventListener("drop", (e) => {
+    if (dragFrom === null) return;
+    e.preventDefault();
+
+    const over = e.target.closest(".column-item");
+    clearDropMarks();
+    if (!over) return;
+
+    const overIndex = Number(over.getAttribute("data-index"));
+    const box = over.getBoundingClientRect();
+    const after = e.clientY > box.top + box.height / 2;
+
+    // Where it should end up in the list as it stands, then corrected for the
+    // fact that removing the dragged column shifts everything after it down.
+    const desired = overIndex + (after ? 1 : 0);
+    const insertAt = desired - (dragFrom < desired ? 1 : 0);
+    if (insertAt === dragFrom) return;
+
+    const [moved] = state.columns.splice(dragFrom, 1);
+    state.columns.splice(insertAt, 0, moved);
+
+    saveColumnOrder();
+    renderColumnList();
+    renderTable();        // the grid reads this order, so it follows immediately
+  });
+
+  columnList?.addEventListener("dragend", () => {
+    dragFrom = null;
+    clearDropMarks();
+    columnList.querySelectorAll('.dragging').forEach(n => n.classList.remove('dragging'));
+  });
+
   resetColBtn?.addEventListener("click", () => {
+    // Resetting has to forget the saved arrangement too, or the defaults come
+    // back in the order the admin last dragged them into.
+    clearColumnOrder();
     state.columns = COLUMNS.map(c => ({ ...c, visible: c.defaultVisible, systemHidden: false }));
     // Rebuilding the column list drops the derived auto-hide flags, so restore
     // them from the current data (this touches only `systemHidden`).
@@ -448,6 +520,7 @@ export function setupGlobalListeners() {
   });
 
   saveColBtn?.addEventListener("click", () => {
+    saveColumnOrder();
     closeColDrawer();
     renderTable();
   });

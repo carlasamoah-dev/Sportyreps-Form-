@@ -43,6 +43,48 @@ export function saveHiddenCards() {
   }
 }
 
+/**
+ * The order the admin has arranged the columns into.
+ *
+ * Stored as a list of column ids rather than positions, so a question added to
+ * COLUMNS later does not shift someone's saved arrangement onto the wrong
+ * fields. Anything not in the saved list keeps its natural position at the end,
+ * which means a new question appears rather than silently going missing.
+ */
+const COLUMN_ORDER_KEY = 'sr.admin.columnOrder';
+
+const loadColumnOrder = () => {
+  try {
+    const raw = localStorage.getItem(COLUMN_ORDER_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (_) {
+    return [];
+  }
+};
+
+export function saveColumnOrder() {
+  try {
+    localStorage.setItem(COLUMN_ORDER_KEY, JSON.stringify(state.columns.map(c => c.id)));
+  } catch (_) {
+    /* storage unavailable: the order still applies for this session */
+  }
+}
+
+export function clearColumnOrder() {
+  try {
+    localStorage.removeItem(COLUMN_ORDER_KEY);
+  } catch (_) { /* nothing to clear */ }
+}
+
+const applySavedOrder = (cols) => {
+  const saved = loadColumnOrder();
+  if (!saved.length) return cols;
+  const byId = new Map(cols.map(c => [c.id, c]));
+  const ordered = saved.map(id => byId.get(id)).filter(Boolean);
+  const seen = new Set(saved);
+  return [...ordered, ...cols.filter(c => !seen.has(c.id))];
+};
+
 export const state = {
   // key -> hidden. Titles are kept alongside so the restore control can name
   // what it is bringing back without re-rendering every card first.
@@ -52,7 +94,7 @@ export const state = {
   filteredSubmissions: [],
   // `visible`     → manual hide flag (admin choice, persisted across the session)
   // `systemHidden` → auto-hide flag (driven by emptiness, recomputed each load)
-  columns: COLUMNS.map(c => ({ ...c, visible: c.defaultVisible, systemHidden: false })),
+  columns: applySavedOrder(COLUMNS.map(c => ({ ...c, visible: c.defaultVisible, systemHidden: false }))),
   isLoginActive: true,
   // Archived submissions are a separate view, never mixed into the active list:
   // seeing them interleaved would make archiving look like it had not worked.
