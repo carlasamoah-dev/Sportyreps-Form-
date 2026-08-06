@@ -1,7 +1,10 @@
 import { fetchSubmissions } from './api.js';
 import { state, recomputeAutoHide } from './state.js';
-import { renderTable } from './render.js';
-import { renderSummary } from './summary.js';
+// Both renderers exist; summary.js is the older one and is no longer wired in.
+// Importing a different renderSummary here from the one events.js calls meant
+// the summary was built by one file on load and rebuilt by another on the first
+// tab click, so edits to summary.js appeared to do nothing.
+import { renderTable, renderSummary } from './render.js';
 import { setupGlobalListeners } from './events.js';
 import { supabaseClient, getSession } from './auth.js';
 

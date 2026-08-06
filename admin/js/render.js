@@ -1,6 +1,6 @@
-import { state } from './state.js';
+import { state, saveHiddenCards } from './state.js';
 import { SVGS } from './constants.js';
-import { formatDate, isUrl } from './utils.js';
+import { formatDate, isUrl, escapeHtml as esc } from './utils.js';
 
 export function renderTable() {
   const head = document.getElementById("grid-head");
@@ -398,21 +398,33 @@ function renderTextSummary(col, data) {
   let count = 0;
   
   data.forEach(row => {
-    let val = row[col.id];
-    if (val !== undefined && val !== null && val !== '' && val !== '–') {
-      if (col.type === 'file' && isUrl(val)) {
-        const firstName = row['talent-contact_firstname'] || row['rep-contact_rep_firstname'] || row['talent-info-for-rep_firstname'] || 'View Attachment';
-        val = `<a href="${val}" target="_blank" style="color:#2563eb;text-decoration:none;">${firstName}</a>`;
-      }
-      listHtml += `
-        <div class="text-list-item" data-val="${String(val).toLowerCase()}">
-          <div class="text-list-quote">“</div>
-          <div class="text-list-val">${val}</div>
-          <div class="text-list-date">${timeAgo(row.created_at)}</div>
-        </div>
-      `;
-      count++;
+    const raw = row[col.id];
+    if (raw === undefined || raw === null || raw === '' || raw === '–') return;
+
+    // What is shown and what is searched are different things. Previously the
+    // rendered markup was reused as the search key, so for a file link the
+    // anchor's own quote closed the data-val attribute and the rest of the tag
+    // spilled onto the page.
+    let display;
+    let searchText;
+
+    if (col.type === 'file' && isUrl(raw)) {
+      const firstName = row['talent-contact_firstname'] || row['rep-contact_rep_firstname'] || row['talent-info-for-rep_firstname'] || 'View Attachment';
+      display = `<a href="${esc(raw)}" target="_blank" rel="noopener noreferrer" style="color:#2563eb;text-decoration:none;">${esc(firstName)}</a>`;
+      searchText = firstName;
+    } else {
+      display = esc(raw);
+      searchText = String(raw);
     }
+
+    listHtml += `
+      <div class="text-list-item" data-val="${esc(searchText.toLowerCase())}">
+        <div class="text-list-quote">“</div>
+        <div class="text-list-val">${display}</div>
+        <div class="text-list-date">${timeAgo(row.created_at)}</div>
+      </div>
+    `;
+    count++;
   });
   listHtml += `</div>`;
 
@@ -444,8 +456,17 @@ export function renderSummary() {
   let html = '';
   const totalPeople = data.length;
 
+  // Cards the admin has dismissed. Keyed by column id, which is stable: renaming
+  // a question's label or reordering the columns will not quietly unhide one
+  // card and hide a different one.
+  const hiddenLabels = new Map();
+
   state.columns.forEach((col, index) => {
     if (col.id === 'created_at' || col.id === 'id') return;
+    if (state.hiddenSummaryCards.has(col.id)) {
+      hiddenLabels.set(col.id, col.label);
+      return;
+    }
 
     let answeredCount = 0;
     const values = [];
@@ -461,11 +482,13 @@ export function renderSummary() {
     const badgeIcon = col.filterType === 'number' ? '#' : `<svg width="14" height="14" viewBox="0 0 24 24" style="margin-top:2px"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" fill="none"/></svg>`;
 
     html += `
-      <div class="summary-card" id="summary-card-${col.id}">
+      <div class="summary-card" id="summary-card-${col.id}" data-card-key="${esc(col.id)}">
         <div class="summary-card-header">
           <div class="q-title-row">
             <span class="q-badge ${badgeClass}">${badgeIcon} ${index}</span>
-            <span class="q-title">${col.label}</span>
+            <span class="q-title">${esc(col.label)}</span>
+            <button class="card-hide-btn" type="button" data-card-key="${esc(col.id)}"
+                    title="Hide this card" aria-label="Hide ${esc(col.label)}">&times;</button>
           </div>
           <span class="q-meta">${answeredCount} out of ${totalPeople} people answered this question.</span>
         </div>
@@ -482,7 +505,24 @@ export function renderSummary() {
     html += `</div>`;
   });
 
-  container.innerHTML = html;
+  // A hidden card leaves nothing behind, so without a way back the only remedy
+  // is clearing browser storage. This names what is hidden and restores it.
+  let restoreHtml = '';
+  if (hiddenLabels.size) {
+    const chips = [...hiddenLabels.entries()].map(([id, label]) => `
+      <button class="summary-restore-btn" type="button" data-card-key="${esc(id)}"
+              title="Show this card again">${esc(label)} &plus;</button>
+    `).join('');
+    restoreHtml = `
+      <div class="summary-hidden-bar">
+        <span class="summary-hidden-count">${hiddenLabels.size} card${hiddenLabels.size === 1 ? '' : 's'} hidden:</span>
+        ${chips}
+        <button class="summary-restore-all" type="button">Show all</button>
+      </div>
+    `;
+  }
+
+  container.innerHTML = restoreHtml + html;
 }
 
 
