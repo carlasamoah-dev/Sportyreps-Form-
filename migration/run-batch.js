@@ -91,27 +91,40 @@ const readEnvFile = () => {
   return out;
 };
 
+// Pull the URL out of whatever was pasted. A stray bracket or quote picked up
+// from a chat window is not a reason to fail two hundred uploads in.
+const cleanUrl = (raw) => {
+  const m = (raw || '').match(/https?:\/\/[^\s'"\]}>,]+/i);
+  return m ? m[0].replace(/\/+$/, '') : '';
+};
+
 const getCredentials = async () => {
   const fromFile = readEnvFile();
-  let url = process.env.SUPABASE_URL || fromFile.SUPABASE_URL;
-  let key = process.env.SUPABASE_SERVICE_ROLE_KEY || fromFile.SUPABASE_SERVICE_ROLE_KEY;
+  let url = cleanUrl(process.env.SUPABASE_URL || fromFile.SUPABASE_URL);
+  let key = (process.env.SUPABASE_SERVICE_ROLE_KEY || fromFile.SUPABASE_SERVICE_ROLE_KEY || '').trim();
   const anon = process.env.SUPABASE_ANON_KEY || fromFile.SUPABASE_ANON_KEY;
 
-  if (url && !/^https:\/\/.+\.supabase\.co/.test(url)) {
-    say(`  note: SUPABASE_URL does not look like a Supabase project URL (${url})`);
+  // Ask until it is usable, rather than handing something broken to the SDK.
+  for (let tries = 0; !url && tries < 3; tries++) {
+    say('\nSupabase project URL. In Supabase: Settings, then API.');
+    say('It looks like  https://something.supabase.co');
+    url = cleanUrl(await ask('  SUPABASE_URL: '));
+    if (!url) say('  That does not contain a web address. Try again.');
   }
-  if (!url) {
-    say('\nSupabase project URL. Find it in Supabase under Settings then API.');
-    url = await ask('  SUPABASE_URL: ');
+  if (url && !/^https:\/\/[a-z0-9-]+\.supabase\./i.test(url)) {
+    say(`  note: ${url} does not look like a Supabase project URL, carrying on anyway`);
   }
+
   if (!key && anon) {
     say('\nOnly an anon key was found. It is not allowed to write the database rows,');
     say('so the run would fail at the last step. Use the service role key instead.');
     say('Supabase, Settings, API, "service_role". Treat it like a password.');
   }
-  if (!key) {
-    key = await askSecret('  SUPABASE_SERVICE_ROLE_KEY (input hidden): ');
+  for (let tries = 0; !key && tries < 3; tries++) {
+    key = (await askSecret('  SUPABASE_SERVICE_ROLE_KEY (input hidden): ')).replace(/^[^A-Za-z0-9_-]+|[^A-Za-z0-9._-]+$/g, '');
+    if (key.length < 20) { say('  That looks too short to be the key. Try again.'); key = ''; }
   }
+
   if (!url || !key) stop('Cannot continue without a project URL and a key.');
   return { SUPABASE_URL: url, SUPABASE_SERVICE_ROLE_KEY: key };
 };
