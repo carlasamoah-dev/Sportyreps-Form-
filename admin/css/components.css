@@ -721,12 +721,14 @@ input[type="checkbox"] {
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
-  opacity: 0;
+  /* Always visible, faintly. Hover-to-reveal fails on trackpads and touch, and
+     leaves no way to discover the control exists. */
+  opacity: .4;
   transition: opacity .12s ease, background .12s ease, color .12s ease;
 }
 
-/* Visible on hover, but always reachable by keyboard rather than hover-only. */
 .summary-card:hover .card-hide-btn,
+.card-hide-btn:hover,
 .card-hide-btn:focus-visible {
   opacity: 1;
 }
