@@ -87,8 +87,9 @@ export function renderTable() {
       } else if (col.type === 'file') {
         if (isUrl(val)) {
           const filename = decodeURIComponent(val.split('/').pop() || 'Attachment');
-          cellHtml = `<button class="file-btn" data-url="${val}">
-                        ${SVGS.file} <span>${filename.substring(0, 18)}…</span>
+          const shown = filename.length > 18 ? `${filename.substring(0, 18)}…` : filename;
+          cellHtml = `<button class="file-btn" data-url="${esc(val)}" title="${esc(filename)}">
+                        ${SVGS.file} <span>${esc(shown)}</span>
                       </button>`;
         }
 

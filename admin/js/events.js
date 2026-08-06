@@ -1,11 +1,20 @@
 import { state, recomputeAutoHide, saveHiddenCards } from './state.js';
+import { escapeHtml as esc } from './utils.js';
+import { SVGS } from './constants.js';
 import { renderTable, renderColumnList, renderDrawer, renderSummary } from './render.js';
 import { COLUMNS } from './constants.js';
 import { isUrl } from './utils.js';
 import { signIn, signOut } from './auth.js';
 import { loadDataAndRender } from './main.js';
 
+let listenersAttached = false;
+
 export function setupGlobalListeners() {
+  // Registering twice would double-fire every click in this file, so the whole
+  // setup is made safe to call more than once rather than relying on the caller.
+  if (listenersAttached) return;
+  listenersAttached = true;
+
   // Login Logic
   const loginBtn = document.getElementById("login-btn");
   const loginOverlay = document.getElementById("login-overlay");
@@ -496,6 +505,7 @@ export function setupGlobalListeners() {
     const fileBtn = e.target.closest(".file-btn");
     if (fileBtn) {
       const url = fileBtn.getAttribute("data-url");
+      closePreview();
       openPreviewModal(url);
     }
   });
@@ -517,6 +527,119 @@ export function setupGlobalListeners() {
 
   closeDrawerBtn?.addEventListener("click", closeDetailDrawer);
   detailDrawerOverlay?.addEventListener("click", closeDetailDrawer);
+
+  // ── Hover preview for file cells ────────────────────────────────────────────
+  // Opening the modal to check which photo a row holds is a lot of clicking when
+  // scanning fifty rows. Hovering shows it in place instead. The delay is what
+  // makes it usable: without it, every pass of the mouse across the column
+  // flashes a panel.
+  const HOVER_OPEN_MS = 1000;
+  const HOVER_CLOSE_MS = 180;   // grace period, so the pointer can travel to the panel
+
+  let hoverPanel = null;
+  let openTimer = null;
+  let closeTimer = null;
+
+  const IMAGE_EXT = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'];
+  const VIDEO_EXT = ['mov', 'mp4'];
+
+  const previewContent = (url) => {
+    const name = decodeURIComponent(url.split('/').pop() || 'Attachment');
+    const ext = (name.split('.').pop() || '').toLowerCase();
+
+    let body;
+    if (IMAGE_EXT.includes(ext)) {
+      body = `<img src="${esc(url)}" alt="">`;
+    } else if (ext === 'pdf') {
+      body = `<iframe src="${esc(url)}#toolbar=0&navpanes=0" title="Preview"></iframe>`;
+    } else if (VIDEO_EXT.includes(ext)) {
+      body = `<video src="${esc(url)}" muted playsinline preload="metadata"></video>`;
+    } else {
+      // Word and PowerPoint cannot be shown by the browser. Saying so beats an
+      // empty frame that looks like a failure.
+      body = `<div class="file-hover-none">${SVGS.file}<span>No preview for .${esc(ext)} files</span></div>`;
+    }
+    return `<div class="file-hover-body">${body}</div>
+            <div class="file-hover-name">${esc(name)}</div>`;
+  };
+
+  const ensurePanel = () => {
+    // Adopt one already in the document before making another: there must only
+    // ever be a single panel, however this ends up being called.
+    hoverPanel = hoverPanel || document.querySelector('.file-hover-preview');
+    if (hoverPanel) return hoverPanel;
+    hoverPanel = document.createElement('div');
+    hoverPanel.className = 'file-hover-preview hidden';
+    // Moving the pointer onto the panel itself must not dismiss it.
+    hoverPanel.addEventListener('mouseenter', () => clearTimeout(closeTimer));
+    hoverPanel.addEventListener('mouseleave', () => scheduleClose());
+    document.body.appendChild(hoverPanel);
+    return hoverPanel;
+  };
+
+  const placePanel = (btn) => {
+    const anchor = btn.getBoundingClientRect();
+    const panel = hoverPanel.getBoundingClientRect();
+    const margin = 10;
+
+    // Prefer the right of the cell, flip to the left when it would run off.
+    let left = anchor.right + margin;
+    if (left + panel.width > window.innerWidth - margin) left = anchor.left - panel.width - margin;
+    left = Math.max(margin, left);
+
+    let top = anchor.top + anchor.height / 2 - panel.height / 2;
+    top = Math.max(margin, Math.min(top, window.innerHeight - panel.height - margin));
+
+    hoverPanel.style.left = `${left}px`;
+    hoverPanel.style.top = `${top}px`;
+  };
+
+  const closePreview = () => {
+    clearTimeout(openTimer);
+    clearTimeout(closeTimer);
+    if (!hoverPanel) return;
+    hoverPanel.classList.add('hidden');
+    hoverPanel.innerHTML = '';           // stop a video or PDF still loading
+    hoverPanel.removeAttribute('data-url');
+  };
+
+  const scheduleClose = () => {
+    clearTimeout(closeTimer);
+    closeTimer = setTimeout(closePreview, HOVER_CLOSE_MS);
+  };
+
+  document.addEventListener('mouseover', (e) => {
+    const btn = e.target.closest('.file-btn[data-url]');
+    if (!btn) return;
+
+    const url = btn.getAttribute('data-url');
+    clearTimeout(closeTimer);
+    if (hoverPanel && hoverPanel.getAttribute('data-url') === url
+        && !hoverPanel.classList.contains('hidden')) return;   // already showing this one
+
+    clearTimeout(openTimer);
+    openTimer = setTimeout(() => {
+      const panel = ensurePanel();
+      panel.setAttribute('data-url', url);
+      panel.innerHTML = previewContent(url);
+      panel.classList.remove('hidden');
+      placePanel(btn);
+    }, HOVER_OPEN_MS);
+  });
+
+  document.addEventListener('mouseout', (e) => {
+    const btn = e.target.closest('.file-btn[data-url]');
+    if (!btn) return;
+    // Leaving for the panel is not leaving.
+    if (hoverPanel && hoverPanel.contains(e.relatedTarget)) return;
+    clearTimeout(openTimer);
+    scheduleClose();
+  });
+
+  // A panel pinned to a cell that has moved is worse than no panel.
+  window.addEventListener('scroll', closePreview, true);
+  window.addEventListener('resize', closePreview);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePreview(); });
 
   // File Preview Modal Logic
   const previewModal = document.getElementById("preview-modal");
