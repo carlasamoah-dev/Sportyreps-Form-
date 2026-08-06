@@ -56,10 +56,16 @@ of it and lives in Supabase where it can be deleted on request.
 
 ## One-time setup
 
-1. Run `migration/sql/001_migration_columns.sql` in the Supabase SQL Editor.
-   It adds the provenance columns, adds the `response_type` column the admin
-   panel already reads, and widens the storage buckets. Without it the import
-   is not idempotent and 34 of the files have nowhere legal to go.
+1. In the Supabase SQL Editor, run `migration/sql/002_storage_buckets.sql` and
+   `migration/sql/003_submission_columns.sql`, **separately**. Together they are
+   what 001 was, split in two because the editor treats a script as one
+   transaction: 001 ends with policy statements that need ownership of
+   `storage.objects`, and where a project refuses those, the bucket and column
+   changes earlier in the script are rolled back with them while the run still
+   looks successful. That is not hypothetical, it cost a 200 file upload 13
+   failures and would have taken the database write down at the last step.
+   `run-batch.js` now asks Supabase whether it is ready before it sends
+   anything, so this cannot go unnoticed again.
 2. `cd backend && npm install` (the migration scripts reuse the backend's
    `@supabase/supabase-js`).
 3. Put the raw export at `migration/source/responses.csv`, or point

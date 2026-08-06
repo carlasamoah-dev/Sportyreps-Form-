@@ -206,6 +206,13 @@ const main = async () => {
   // ── 2. Upload the files ─────────────────────────────────────────────────────
   const creds = await getCredentials();
 
+  // Ask Supabase whether it can actually accept this export before sending any
+  // of it. The alternative is finding out one file at a time, which is how 13
+  // failures got discovered after 200 uploads.
+  if (run('check-supabase.js', [], creds) === 4) {
+    stop('Nothing has been uploaded. Run the SQL above, then run this command again.');
+  }
+
   banner('STEP 2 of 4  Uploading the files to Supabase Storage.');
   if (run('upload-batch.js', ['--batch', batch, '--dir', dir], creds) !== 0) {
     stop('Some files did not upload. Run the same command again; it skips whatever\nalready went up and retries the rest.');
