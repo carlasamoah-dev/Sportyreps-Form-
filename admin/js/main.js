@@ -10,7 +10,7 @@ import { supabaseClient, getSession } from './auth.js';
 
 export async function loadDataAndRender() {
   try {
-    const data = await fetchSubmissions();
+    const data = await fetchSubmissions({ archived: state.viewingArchived });
     state.submissions = data;
     state.filteredSubmissions = data;
     // Derive auto-hide fresh from the full dataset on each admin load.

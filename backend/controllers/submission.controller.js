@@ -13,24 +13,38 @@ const env = require('../config/env');
  * Returns all submissions from the database, sorted newest first.
  * Used by the Admin Panel to populate the data grid.
  */
-const getSubmissions = catchAsync(async (req, res) => {
-  // Grab the admin's JWT token that was validated by the auth middleware
+/**
+ * A Supabase client acting as the logged-in admin.
+ *
+ * The backend only holds the anon key, so every admin query has to carry the
+ * admin's own JWT to satisfy row level security. requireAuth has already
+ * verified that token before any of this runs.
+ */
+const asAdmin = (req) => {
   const token = req.headers['authorization'].split(' ')[1];
-
-  // Create a dynamic Supabase client acting as the authenticated admin
-  // This allows the query to pass the Row Level Security (RLS) 'SELECT' policy
-  const adminSupabase = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
-    global: {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    },
+  return createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
   });
+};
 
-  const { data, error } = await adminSupabase
+const getSubmissions = catchAsync(async (req, res) => {
+  const adminSupabase = asAdmin(req);
+
+  // Archived submissions are hidden unless asked for explicitly, and are never
+  // mixed in with the active ones: a list that silently included them would
+  // make archiving look like it had not worked.
+  const wantArchived = req.query.archived === '1' || req.query.archived === 'true';
+
+  let query = adminSupabase
     .from('submissions')
     .select('*')
     .order('created_at', { ascending: false });
+
+  query = wantArchived
+    ? query.not('deleted_at', 'is', null)
+    : query.is('deleted_at', null);
+
+  const { data, error } = await query;
 
   if (error) {
     throw new Error(`Failed to fetch submissions: ${error.message}`);
@@ -103,7 +117,64 @@ const handleSubmission = catchAsync(async (req, res) => {
   });
 });
 
+
+/**
+ * DELETE /api/submissions/:id
+ *
+ * Archives rather than deletes: the row keeps its data and its uploaded files,
+ * and stops appearing in the admin list. Restorable, because Supabase Storage
+ * has no recycle bin and for the migrated players the only other copy of their
+ * photographs is on one laptop.
+ */
+const archiveSubmission = catchAsync(async (req, res) => {
+  const { id } = req.params;
+
+  const { data, error } = await asAdmin(req)
+    .from('submissions')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', id)
+    .is('deleted_at', null)      // archiving twice must not move the timestamp
+    .select('id')
+    .maybeSingle();
+
+  if (error) throw new Error(`Failed to archive submission: ${error.message}`);
+  if (!data) {
+    return res.status(404).json({ code: 404, message: 'No active submission with that id.' });
+  }
+
+  logger.info(`Submission ${id} archived by ${req.user?.email || 'unknown admin'}`);
+  res.status(200).json({ code: 200, message: 'Submission archived.', data });
+});
+
+/**
+ * POST /api/submissions/:id/restore
+ *
+ * Puts an archived submission back. Archiving is only reversible if this exists,
+ * so it ships with it rather than after it.
+ */
+const restoreSubmission = catchAsync(async (req, res) => {
+  const { id } = req.params;
+
+  const { data, error } = await asAdmin(req)
+    .from('submissions')
+    .update({ deleted_at: null })
+    .eq('id', id)
+    .not('deleted_at', 'is', null)
+    .select('id')
+    .maybeSingle();
+
+  if (error) throw new Error(`Failed to restore submission: ${error.message}`);
+  if (!data) {
+    return res.status(404).json({ code: 404, message: 'No archived submission with that id.' });
+  }
+
+  logger.info(`Submission ${id} restored by ${req.user?.email || 'unknown admin'}`);
+  res.status(200).json({ code: 200, message: 'Submission restored.', data });
+});
+
 module.exports = {
   getSubmissions,
-  handleSubmission
+  handleSubmission,
+  archiveSubmission,
+  restoreSubmission
 };

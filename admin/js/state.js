@@ -54,6 +54,9 @@ export const state = {
   // `systemHidden` → auto-hide flag (driven by emptiness, recomputed each load)
   columns: COLUMNS.map(c => ({ ...c, visible: c.defaultVisible, systemHidden: false })),
   isLoginActive: true,
+  // Archived submissions are a separate view, never mixed into the active list:
+  // seeing them interleaved would make archiving look like it had not worked.
+  viewingArchived: false,
   activeFilters: [] // Array of { id: string, column: string, condition: string, value: string }
 };
 

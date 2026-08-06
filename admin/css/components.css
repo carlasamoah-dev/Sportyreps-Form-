@@ -842,3 +842,35 @@ input[type="checkbox"] {
   color: var(--text-muted, #6b7280);
   word-break: break-all;
 }
+
+/* ── Archiving ─────────────────────────────────────────────────────────────
+   Archive is destructive-looking but reversible, so it is coloured as a warning
+   rather than as a danger: red would overstate what it does. */
+.drawer-archive,
+.drawer-restore {
+  padding: 5px 12px;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  background: #fff;
+}
+
+.drawer-archive { color: #b45309; }
+.drawer-archive:hover:not(:disabled) { background: #fffbeb; border-color: #f59e0b; }
+
+.drawer-restore { color: #065f46; }
+.drawer-restore:hover:not(:disabled) { background: #ecfdf5; border-color: #10b981; }
+
+.drawer-archive:disabled,
+.drawer-restore:disabled { opacity: .5; cursor: not-allowed; }
+
+/* The archived view is a mode, not a filter, so the control has to look latched
+   rather than merely hovered. */
+#archived-toggle.active {
+  background: #fffbeb;
+  border-color: #f59e0b;
+  color: #b45309;
+}
