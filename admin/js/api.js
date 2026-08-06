@@ -106,7 +106,7 @@ const mockSubmissions = [
  * Sends the Supabase JWT as a Bearer token so the backend can verify the admin.
  * Falls back to mock data if the backend is unreachable (dev without backend).
  */
-export async function fetchSubmissions() {
+export async function fetchSubmissions({ archived = false } = {}) {
   const token = await getAccessToken();
 
   // No token means not logged in via Supabase yet — use mock data in dev
@@ -116,7 +116,8 @@ export async function fetchSubmissions() {
   };
 
   try {
-    const res = await fetch(BACKEND_URL, { method: 'GET', headers });
+    const url = archived ? `${BACKEND_URL}?archived=1` : BACKEND_URL;
+    const res = await fetch(url, { method: 'GET', headers });
 
     if (res.status === 401) {
       // Session expired — surface to the UI
@@ -136,3 +137,32 @@ export async function fetchSubmissions() {
     return new Promise(resolve => setTimeout(() => resolve(mockSubmissions), 600));
   }
 }
+
+
+/**
+ * Archive a submission, or put one back.
+ *
+ * Both need the admin's JWT: the backend holds only the anon key and acts as the
+ * logged-in admin to satisfy row level security. Unlike fetchSubmissions these
+ * never fall back to mock data, because silently pretending a write succeeded is
+ * worse than reporting that it failed.
+ */
+async function adminWrite(path, method) {
+  const token = await getAccessToken();
+  if (!token) throw new Error('SESSION_EXPIRED');
+
+  const res = await fetch(path, {
+    method,
+    headers: { 'Accept': 'application/json', 'Authorization': `Bearer ${token}` },
+  });
+
+  if (res.status === 401) throw new Error('SESSION_EXPIRED');
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || `Request failed with status ${res.status}`);
+  }
+  return res.json();
+}
+
+export const archiveSubmission = (id) => adminWrite(`${BACKEND_URL}/${encodeURIComponent(id)}`, 'DELETE');
+export const restoreSubmission = (id) => adminWrite(`${BACKEND_URL}/${encodeURIComponent(id)}/restore`, 'POST');

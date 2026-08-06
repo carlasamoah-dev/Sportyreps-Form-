@@ -2,6 +2,7 @@ import { state, recomputeAutoHide, saveHiddenCards } from './state.js';
 import { escapeHtml as esc } from './utils.js';
 import { SVGS } from './constants.js';
 import { renderTable, renderColumnList, renderDrawer, renderSummary } from './render.js';
+import { archiveSubmission, restoreSubmission } from './api.js';
 import { COLUMNS } from './constants.js';
 import { isUrl } from './utils.js';
 import { signIn, signOut } from './auth.js';
@@ -640,6 +641,65 @@ export function setupGlobalListeners() {
   window.addEventListener('scroll', closePreview, true);
   window.addEventListener('resize', closePreview);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePreview(); });
+
+  // ── Archiving ───────────────────────────────────────────────────────────────
+  // Archive rather than delete: the row and its uploaded files survive and can be
+  // restored. See sql/001_archive_submissions.sql.
+  const archiveBtn = document.getElementById("archive-btn");
+  const archivedToggle = document.getElementById("archived-toggle");
+  const archivedToggleLabel = document.getElementById("archived-toggle-label");
+
+  const nameOf = (row) => [row?.['talent-contact_firstname'], row?.['talent-contact_lastname']]
+    .filter(Boolean).join(' ').trim()
+    || row?.['talent-info-for-rep_firstname']
+    || row?.email
+    || 'this response';
+
+  archiveBtn?.addEventListener("click", async () => {
+    const drawer = document.getElementById("detail-drawer");
+    const id = drawer?.getAttribute("data-row-id");
+    if (!id) return;
+
+    const row = state.submissions.find(r => String(r.id) === String(id));
+    const archived = Boolean(row?.deleted_at);
+    const who = nameOf(row);
+
+    const message = archived
+      ? `Restore ${who}?\n\nThey will appear in the responses list again.`
+      : `Archive ${who}?\n\nThey will be removed from the list. The record and their uploaded files are kept, and you can restore them from the Archived view.`;
+    if (!window.confirm(message)) return;
+
+    archiveBtn.disabled = true;
+    const previousText = archiveBtn.textContent;
+    archiveBtn.textContent = archived ? 'Restoring…' : 'Archiving…';
+
+    try {
+      if (archived) await restoreSubmission(id);
+      else await archiveSubmission(id);
+
+      closeDetailDrawer();
+      await loadDataAndRender();
+    } catch (err) {
+      archiveBtn.textContent = previousText;
+      archiveBtn.disabled = false;
+      if (err.message === 'SESSION_EXPIRED') {
+        window.alert('Your session has expired. Log in again and retry.');
+        return;
+      }
+      // Reporting the failure beats a silent no-op that looks like it worked.
+      window.alert(`Could not ${archived ? 'restore' : 'archive'} ${who}.\n\n${err.message}`);
+    }
+  });
+
+  archivedToggle?.addEventListener("click", async () => {
+    state.viewingArchived = !state.viewingArchived;
+    archivedToggle.setAttribute("aria-pressed", String(state.viewingArchived));
+    archivedToggle.classList.toggle("active", state.viewingArchived);
+    if (archivedToggleLabel) {
+      archivedToggleLabel.textContent = state.viewingArchived ? 'Archived only' : 'Archived';
+    }
+    await loadDataAndRender();
+  });
 
   // File Preview Modal Logic
   const previewModal = document.getElementById("preview-modal");

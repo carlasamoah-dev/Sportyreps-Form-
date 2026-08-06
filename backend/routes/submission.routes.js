@@ -1,5 +1,5 @@
 const express = require('express');
-const { handleSubmission, getSubmissions } = require('../controllers/submission.controller');
+const { handleSubmission, getSubmissions, archiveSubmission, restoreSubmission } = require('../controllers/submission.controller');
 const upload = require('../middlewares/upload.middleware');
 const validate = require('../middlewares/validate.middleware');
 const requireAuth = require('../middlewares/auth.middleware');
@@ -17,5 +17,13 @@ router.post(
   validate(submissionSchema),
   handleSubmission
 );
+
+// DELETE /api/submissions/:id — Admin archives an entry (PROTECTED)
+// Archive, not destroy: the row and its uploaded files stay, it simply leaves
+// the list. See sql/001_archive_submissions.sql for why.
+router.delete('/:id', requireAuth, archiveSubmission);
+
+// POST /api/submissions/:id/restore — Admin puts an archived entry back (PROTECTED)
+router.post('/:id/restore', requireAuth, restoreSubmission);
 
 module.exports = router;

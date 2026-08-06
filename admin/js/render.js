@@ -162,6 +162,23 @@ export function renderDrawer(rowIndex) {
     drawerTimestamp.textContent = formatDate(row.created_at);
   }
 
+  // The archive control acts on whatever the drawer is currently showing, so the
+  // drawer is where the identity lives rather than in a variable that can drift
+  // out of step with what is on screen.
+  const drawer = document.getElementById("detail-drawer");
+  if (drawer) drawer.setAttribute("data-row-id", row.id ?? "");
+
+  const archiveBtn = document.getElementById("archive-btn");
+  if (archiveBtn) {
+    const archived = Boolean(row.deleted_at);
+    archiveBtn.textContent = archived ? "Restore" : "Archive";
+    archiveBtn.className = archived ? "btn-text drawer-restore" : "btn-text drawer-archive";
+    archiveBtn.disabled = !row.id;
+    archiveBtn.title = row.id
+      ? (archived ? "Put this response back in the list" : "Remove this response from the list, keeping the record and its files")
+      : "This response has no id, so it cannot be archived";
+  }
+
   let html = ``;
   
   // Render fields dynamically
