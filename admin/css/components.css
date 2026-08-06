@@ -897,3 +897,38 @@ input[type="checkbox"] {
 /* The eye toggle sits inside a draggable tile, so it must not start a drag when
    what the pointer is actually doing is pressing a button. */
 .column-item .toggle-col-btn { cursor: pointer; }
+
+/* The grip icon and the label are decoration. Letting them receive the pointer
+   means a drag can begin on a child rather than on the draggable tile, which
+   Safari in particular refuses to start. Making them transparent to the pointer
+   guarantees every press lands on the tile itself. */
+.column-item > svg,
+.column-item > span:not(.auto-hide-badge):not(.col-move) {
+  pointer-events: none;
+}
+
+/* Move up and down, for when dragging is not available or not wanted. */
+.col-move {
+  display: inline-flex;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.col-move .move-col-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 5px;
+  color: var(--text-muted, #6b7280);
+  cursor: pointer;
+}
+
+.col-move .move-col-btn:hover:not(:disabled) {
+  background: var(--bg-subtle, #f1f5f9);
+  color: #7c3aed;
+}
+
+.col-move .move-col-btn:disabled {
+  opacity: .25;
+  cursor: default;
+}

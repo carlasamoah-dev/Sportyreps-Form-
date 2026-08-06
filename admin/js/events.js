@@ -428,6 +428,26 @@ export function setupGlobalListeners() {
   colDrawerOverlay?.addEventListener("click", closeColDrawer);
 
   document.getElementById("column-list")?.addEventListener("click", (e) => {
+    // Dragging is the quick way, but it depends on the browser's drag and drop
+    // behaving. These always work, on any browser and by keyboard.
+    const moveBtn = e.target.closest(".move-col-btn");
+    if (moveBtn && !moveBtn.disabled) {
+      const from = Number(moveBtn.getAttribute("data-index"));
+      const to = from + Number(moveBtn.getAttribute("data-dir"));
+      if (to < 0 || to >= state.columns.length) return;
+
+      const [moved] = state.columns.splice(from, 1);
+      state.columns.splice(to, 0, moved);
+      saveColumnOrder();
+      renderColumnList();
+      renderTable();
+
+      // Keep the focus on the same column so it can be moved repeatedly without
+      // hunting for the button again.
+      document.querySelector(`.column-item[data-index="${to}"] .move-col-btn[data-dir="${moveBtn.getAttribute("data-dir")}"]`)?.focus();
+      return;
+    }
+
     const toggleBtn = e.target.closest(".toggle-col-btn");
     if (toggleBtn) {
       const colId = toggleBtn.getAttribute("data-id");
