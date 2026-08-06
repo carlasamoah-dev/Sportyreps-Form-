@@ -79,7 +79,14 @@ Everything below runs on the machine that holds the media. The files go straight
 from that disk to Supabase; nothing about this migration works remotely, because
 nothing else can see the files.
 
-One command does a whole batch, stopping at each gate:
+The batch number is only a label on the manifest and a filter for the upload and
+insert. Every script processes whatever folders it actually finds, so all 50
+responses can go in a single pass and usually should: batching by five was a
+consequence of flat drops, where small groups were the only way to keep
+filenames untangled, and response id folders removed that constraint. Keep the
+batches only if you want smaller reports to read.
+
+One command does a whole drop, stopping at each gate:
 
 ```bash
 node migration/run-batch.js 1
