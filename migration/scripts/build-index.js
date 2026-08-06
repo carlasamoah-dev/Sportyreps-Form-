@@ -158,7 +158,43 @@ const renderBatches = (index) => {
   return { text: lines.join('\n'), ids, crossPerson, crossSlot };
 };
 
+/**
+ * Confirm the export on this machine is the one the column map was built
+ * against, without writing anything.
+ *
+ * The transform addresses columns by position, because Typeform repeats header
+ * labels. A re-export with columns in a different order would therefore read
+ * plausible values out of the wrong fields and import silent nonsense. Rebuilding
+ * the index and comparing it to the committed one catches that: the 200 file
+ * references it produces are a fingerprint of the whole layout.
+ */
+const checkSource = () => {
+  const built = indexFromSource().map(r => r.join('|'));
+  const committed = indexFromFile().map(r => r.join('|'));
+
+  if (built.length === committed.length && built.every((r, i) => r === committed[i])) {
+    console.log(`The export matches. ${built.length - 1} files across `
+      + `${new Set(indexFromFile().slice(1).map(r => r[0])).size} responses, all as expected.`);
+    return 0;
+  }
+
+  console.log('This export does NOT match the one the migration was built against.\n');
+  console.log(`  expected ${committed.length - 1} file references, this file gives ${built.length - 1}`);
+
+  const missing = committed.filter(r => !built.includes(r)).slice(1, 6);
+  const extra = built.filter(r => !committed.includes(r)).slice(0, 5);
+  for (const m of missing) console.log(`  expected but not found:  ${m.split('|').slice(0, 3).join('  ')}`);
+  for (const e of extra) console.log(`  found but not expected:  ${e.split('|').slice(0, 3).join('  ')}`);
+
+  console.log('\nDo not import from this file. Columns read by position, so a different');
+  console.log('layout would write real-looking values into the wrong fields. Find the');
+  console.log('original export, or say so and the column map can be rebuilt for this one.');
+  return 4;
+};
+
 const main = () => {
+  if (process.argv.includes('--check')) process.exit(checkSource());
+
   const fromIndex = process.argv.includes('--from-index');
   const index = fromIndex ? indexFromFile() : indexFromSource();
 

@@ -64,7 +64,12 @@ of it and lives in Supabase where it can be deleted on request.
    `@supabase/supabase-js`).
 3. Put the raw export at `migration/source/responses.csv`, or point
    `SOURCE_CSV` at it.
-4. `node migration/scripts/build-index.js` to regenerate `file_index.csv` and
+4. `node migration/scripts/build-index.js --check` to confirm the export on this
+   machine is the one the column map was built against. The transform reads
+   columns by position, because Typeform repeats header labels, so a re-export
+   with a different layout would import real-looking values into the wrong
+   fields. `run-batch.js` runs this check before it uploads anything.
+5. `node migration/scripts/build-index.js` to regenerate `file_index.csv` and
    `batches.md`. Without the export, `--from-index` rebuilds `batches.md` alone
    from the committed index.
 

@@ -143,6 +143,12 @@ const main = async () => {
   say(`\nBatch ${batch}${dry ? '  (rehearsal, nothing will be uploaded or saved)' : ''}`);
   say(`Reading from ${dir}  (${folders} item${folders === 1 ? '' : 's'})`);
 
+  // The export is checked before anything is uploaded rather than at step 3, so
+  // a mismatched spreadsheet is caught while it still costs nothing.
+  if (fs.existsSync(PATHS.sourceCsv) && run('build-index.js', ['--check']) === 4) {
+    stop('Stopping before anything is uploaded. See above.');
+  }
+
   // ── 1. Check the files ──────────────────────────────────────────────────────
   banner('STEP 1 of 4  Checking the files. Nothing is uploaded yet.');
   const checked = run('verify-batch.js', ['--batch', batch, '--dir', dir]);
