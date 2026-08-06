@@ -41,6 +41,14 @@ const SLOT_COLUMN = Object.fromEntries(SLOTS.map(s => [s.slot, s.dbColumn]));
 
 const main = async () => {
   const payloads = JSON.parse(fs.readFileSync(`${PATHS.out}/payloads.json`, 'utf8'));
+
+  // Responses transform-rows deliberately left out. Their media was uploaded,
+  // because the upload runs before any of this and does not know about policy,
+  // so without this they look identical to a response that failed to transform.
+  const excludedPath = `${PATHS.out}/excluded.json`;
+  const excluded = fs.existsSync(excludedPath)
+    ? JSON.parse(fs.readFileSync(excludedPath, 'utf8'))
+    : {};
   const table = parseCsv(fs.readFileSync(PATHS.manifest, 'utf8'));
   const header = table[0];
   const col = Object.fromEntries(header.map((h, i) => [h, i]));
@@ -52,6 +60,7 @@ const main = async () => {
 
   const ready = [];
   const blocked = [];
+  const skipped = [];
 
   const byResponse = new Map();
   for (const r of media) {
@@ -63,7 +72,9 @@ const main = async () => {
   for (const [id, files] of byResponse) {
     const payload = payloads[id];
     if (!payload) {
-      blocked.push({ id, reason: 'media uploaded but no answer payload (excluded by policy, or transform not run)' });
+      // A decision already taken is not a question to be asked again.
+      if (excluded[id]) skipped.push({ id, reason: excluded[id] });
+      else blocked.push({ id, reason: 'media uploaded but no answer payload (has transform-rows.js been run?)' });
       continue;
     }
 
@@ -84,7 +95,12 @@ const main = async () => {
   fs.writeFileSync(`${PATHS.out}/payloads-linked.json`, JSON.stringify(ready, null, 2));
 
   console.log(`linked   ${ready.length} responses`);
+  for (const s of skipped) console.log(`  SKIP ${s.id}  ${s.reason}`);
   for (const b of blocked) console.log(`  HOLD ${b.id}  ${b.reason}`);
+  if (skipped.length) {
+    console.log(`\n${skipped.length} response(s) skipped by policy. Their files are in Storage but they`);
+    console.log('will not appear in the database. See "Open policy decisions" in the README.');
+  }
   if (!doInsert) {
     console.log('\nNot inserted. Re-run with --insert once the rows above look right.');
     return;
@@ -110,6 +126,15 @@ const main = async () => {
 
   if (error) {
     console.error(`insert failed: ${error.message}`);
+
+    // This one is worth naming, because the message describes a missing
+    // constraint that is in fact present, just partial and therefore unusable
+    // for an upsert issued through PostgREST.
+    if (/ON CONFLICT/i.test(error.message)) {
+      console.error('\nThe uniqueness on source_response_id exists but is a partial index, which');
+      console.error('an upsert cannot use. Run migration/sql/005_fix_source_index.sql in the');
+      console.error('Supabase SQL Editor, then run this again. Nothing has been written.');
+    }
     process.exit(1);
   }
   console.log(`inserted ${ready.length} rows (upsert on source_response_id)`);

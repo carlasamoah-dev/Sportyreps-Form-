@@ -1,4 +1,4 @@
-import { state, recomputeAutoHide } from './state.js';
+import { state, recomputeAutoHide, saveHiddenCards } from './state.js';
 import { renderTable, renderColumnList, renderDrawer, renderSummary } from './render.js';
 import { COLUMNS } from './constants.js';
 import { isUrl } from './utils.js';
@@ -545,6 +545,31 @@ export function setupGlobalListeners() {
   const summaryContainer = document.getElementById("summary-container");
   
   summaryContainer?.addEventListener("click", (e) => {
+    // Hiding a summary card, and putting it back. Delegated because the summary
+    // is re-rendered wholesale on every change.
+    const hideBtn = e.target.closest(".card-hide-btn");
+    if (hideBtn) {
+      state.hiddenSummaryCards.add(hideBtn.getAttribute("data-card-key"));
+      saveHiddenCards();
+      renderSummary();
+      return;
+    }
+
+    const restoreBtn = e.target.closest(".summary-restore-btn");
+    if (restoreBtn) {
+      state.hiddenSummaryCards.delete(restoreBtn.getAttribute("data-card-key"));
+      saveHiddenCards();
+      renderSummary();
+      return;
+    }
+
+    if (e.target.closest(".summary-restore-all")) {
+      state.hiddenSummaryCards.clear();
+      saveHiddenCards();
+      renderSummary();
+      return;
+    }
+
     const summaryTab = e.target.closest(".summary-tab");
     if (summaryTab) {
       const controls = summaryTab.closest(".card-controls");

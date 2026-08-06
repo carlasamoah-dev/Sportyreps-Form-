@@ -16,14 +16,32 @@ right slot. Three facts from the export decide the design:
   of 150, so names cannot be read off the files. But the export records the exact
   original filename for every file against its response and slot. Unchanged
   filenames therefore match exactly.
-- Filenames are not globally unique. Three filenames appear under two different
-  responses, and ten responses reuse one photo across several slots. Both cases
-  are detected and held for a human decision rather than guessed at.
+- Filenames are not globally unique, in two different ways. Four filenames appear
+  under two different responses. Separately, 11 responses give two of their slots
+  the same original filename, and the export cannot say whether those are one
+  photo reused or two different photos that happen to share a name: the
+  `typeform_hash` column is a URL segment, unique per row by construction, so it
+  carries no information about content. Both cases are held for a human decision
+  rather than guessed at.
 
-Hence the rule for every batch: **drop the files exactly as exported, do not
-rename them.** Renaming to the canonical `{response_id}/{slot}.{ext}` happens on
-the way into Supabase Storage, where the path itself makes a misfiled object
-visible by eye.
+Hence the drop layout: **one folder per response, named after the response id.**
+The folder settles who a file belongs to, so filenames no longer have to. For
+the 11 responses above the slot has to be stated too, either by a `{slot}/`
+subfolder or by naming the file `{slot}.{ext}`.
+
+```
+incoming/{response_id}/{original_filename}     slot read off the filename
+incoming/{response_id}/{slot}/{any_filename}   slot read off the folder
+```
+
+Original filenames are still matched against `file_index.csv`, so leaving them
+unchanged remains the safest default and is what catches a file dropped into the
+wrong folder. A harness-added prefix such as `c96b7e754eed-IMG_0488.jpeg` matches
+on suffix. Flat drops straight into `incoming/` still work for the responses
+whose filenames are unambiguous.
+
+Renaming to the canonical `{response_id}/{slot}.{ext}` happens on the way into
+Supabase Storage, where the path itself makes a misfiled object visible by eye.
 
 ## What is and is not in git
 
@@ -38,23 +56,62 @@ of it and lives in Supabase where it can be deleted on request.
 
 ## One-time setup
 
-1. Run `migration/sql/001_migration_columns.sql` in the Supabase SQL Editor.
-   It adds the provenance columns, adds the `response_type` column the admin
-   panel already reads, and widens the storage buckets. Without it the import
-   is not idempotent and 34 of the files have nowhere legal to go.
+1. In the Supabase SQL Editor, run `migration/sql/002_storage_buckets.sql`,
+   `003_submission_columns.sql`, `004_minor_flags.sql` and, on a project that
+   already ran an earlier `003`, `005_fix_source_index.sql`, **separately**. Together they are
+   what 001 was, split in two because the editor treats a script as one
+   transaction: 001 ends with policy statements that need ownership of
+   `storage.objects`, and where a project refuses those, the bucket and column
+   changes earlier in the script are rolled back with them while the run still
+   looks successful. That is not hypothetical, it cost a 200 file upload 13
+   failures and would have taken the database write down at the last step.
+   `run-batch.js` now asks Supabase whether it is ready before it sends
+   anything, so this cannot go unnoticed again.
 2. `cd backend && npm install` (the migration scripts reuse the backend's
    `@supabase/supabase-js`).
 3. Put the raw export at `migration/source/responses.csv`, or point
    `SOURCE_CSV` at it.
-4. `node migration/scripts/build-index.js` to regenerate `file_index.csv` and
-   `batches.md`.
+4. `node migration/scripts/build-index.js --check` to confirm the export on this
+   machine is the one the column map was built against. The transform reads
+   columns by position, because Typeform repeats header labels, so a re-export
+   with a different layout would import real-looking values into the wrong
+   fields. `run-batch.js` runs this check before it uploads anything.
+5. `node migration/scripts/build-index.js` to regenerate `file_index.csv` and
+   `batches.md`. Without the export, `--from-index` rebuilds `batches.md` alone
+   from the committed index.
 
 ## The batch loop
 
-For each batch listed in `batches.md`:
+Everything below runs on the machine that holds the media. The files go straight
+from that disk to Supabase; nothing about this migration works remotely, because
+nothing else can see the files.
+
+The batch number is only a label on the manifest and a filter for the upload and
+insert. Every script processes whatever folders it actually finds, so all 50
+responses can go in a single pass and usually should: batching by five was a
+consequence of flat drops, where small groups were the only way to keep
+filenames untangled, and response id folders removed that constraint. Keep the
+batches only if you want smaller reports to read.
+
+One command does a whole drop, stopping at each gate:
 
 ```bash
-# 1. drop the batch's files into migration/incoming/ with original names intact
+node migration/run-batch.js 1
+
+node migration/run-batch.js 1 --dry          # rehearse, change nothing
+node migration/run-batch.js 1 --media-only   # upload the files, skip the rows
+```
+
+It refuses to go past a HOLD, asks before uploading and again before writing to
+the database, and is safe to re-run: an interrupted batch resumes where it
+stopped. Credentials come from the environment, then `backend/.env`, and are
+only prompted for as a last resort.
+
+The individual steps below are what it runs, and are still the way to drive a
+batch by hand:
+
+```bash
+# 1. drop the batch's files into migration/incoming/{response_id}/
 
 # 2. verify before anything moves
 node migration/scripts/verify-batch.js --batch 1
@@ -88,10 +145,24 @@ insert upserts on `source_response_id`.
 These are set in `scripts/config.js` under `POLICY` and are deliberately
 conservative. Change them there, not in the transform code.
 
-- `excludeMinors: true`. Twelve records are under 18 at submission, including a
-  12 and a 13 year old who submitted as talents. The live form ends the journey
-  for under-18s, so importing them would contradict the product's own gate.
-  Flip the flag to import them anyway.
+- `excludeMinors: false`. Eleven records are under 18 at submission, aged 12 to
+  17. The live form ends the journey for under-18s, so the first pass left them
+  out on that basis. They are now imported, because those responses were
+  completed by guardians on the players' behalf, which is a different situation
+  from a child filling the form in unsupervised.
+
+  That decision adds a duty rather than removing one, so `sql/004` gives every
+  imported row `is_minor_at_submission`, `age_at_submission` and
+  `guardian_on_record`, filled for adults too so that `false` means checked.
+  Without them, anyone meeting these records later would reasonably assume every
+  player is an adult, since the live form admits nobody else.
+
+  If you set this back to `true`, note that files are uploaded before the
+  transform runs, so the excluded players' photographs and CVs go up regardless
+  and then sit in public buckets attached to no record. `prune-excluded.js`
+  reports them and, with `--delete`, removes them. It reads the exclusion list
+  the transform writes, so it can only ever touch responses deliberately left
+  out.
 - Height, speed, education and position all carry unresolvable ambiguity in the
   source. The transform maps what it safely can, nulls the rest, and records
   every decision in `review_flags.csv` rather than inventing a value.

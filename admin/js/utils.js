@@ -15,3 +15,21 @@ export function formatDate(dateString) {
 export function isUrl(str) {
   return typeof str === 'string' && (str.startsWith('http://') || str.startsWith('https://'));
 }
+
+/**
+ * Escape a value for interpolation into HTML.
+ *
+ * Everything rendered in the admin panel is a submitted form answer, so nothing
+ * from a record can be trusted as markup. Interpolating raw is how the summary
+ * ended up printing fragments of its own HTML: a value containing a quote closed
+ * the surrounding attribute early and the remainder rendered as text. The same
+ * route would run a script tag in a logged-in admin page.
+ */
+export function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}

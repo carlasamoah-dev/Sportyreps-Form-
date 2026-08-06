@@ -1,5 +1,30 @@
-import { state } from './state.js';
+import { state, cardKey } from './state.js';
 import { formatDate } from './utils.js';
+
+/**
+ * Values come from submitted form answers, so they are never trusted as markup.
+ * Without this a name containing a quote or an angle bracket breaks out of the
+ * surrounding tag, which is how the rear-view card ended up rendering fragments
+ * of its own HTML as text.
+ */
+const esc = (v) => String(v ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;');
+
+/**
+ * A card the admin has hidden. Recorded by title slug and returned in the same
+ * shape a real card would be, so the caller needs no special case and the chart
+ * pass skips it naturally on the null canvasId.
+ */
+function hiddenCard(title) {
+  const key = cardKey(title);
+  state.hiddenSummaryTitles.set(key, title);
+  if (!state.hiddenSummaryCards.has(key)) return null;
+  return { html: '', canvasId: null, entries: [], isLong: false, hidden: true };
+}
 
 /**
  * Compute frequency count for a given field key across all submissions.
@@ -51,10 +76,13 @@ function computeNumericStats(key) {
 function questionCard(number, iconBg, iconColor, iconLabel, title, answeredCount, bodyHtml) {
   const total = state.submissions.length;
   return `
-    <div class="summary-card" id="q-card-${number}">
+    <div class="summary-card" id="q-card-${number}" data-card-key="${cardKey(title)}">
       <div class="summary-card-header">
         <span class="q-badge" style="background:${iconBg};color:${iconColor};">${iconLabel} ${number}</span>
-        <h3 class="q-title">${title}</h3>
+        <h3 class="q-title">${esc(title)}</h3>
+        <button class="card-hide-btn" type="button"
+                data-card-key="${cardKey(title)}"
+                title="Hide this card" aria-label="Hide ${esc(title)}">&times;</button>
       </div>
       <p class="q-meta">${answeredCount} out of ${total} people answered this question.</p>
       ${bodyHtml}
@@ -66,6 +94,8 @@ function questionCard(number, iconBg, iconColor, iconLabel, title, answeredCount
  * Build a table + bar chart card for a choice field
  */
 function choiceCardHtml(number, iconBg, iconColor, iconLabel, title, key, multiValue = false) {
+  const hidden = hiddenCard(title);
+  if (hidden) return hidden;
   const counts = countField(key, multiValue);
   const answered = multiValue
     ? Object.values(counts).reduce((s, v) => s + v, 0)
@@ -107,6 +137,8 @@ function choiceCardHtml(number, iconBg, iconColor, iconLabel, title, key, multiV
  * Build a numeric stats card
  */
 function numericCardHtml(number, title, key, unit = '') {
+  const hidden = hiddenCard(title);
+  if (hidden) return hidden;
   const stats = computeNumericStats(key);
   const answered = countAnswered(key);
   if (!stats) {
@@ -127,6 +159,8 @@ function numericCardHtml(number, title, key, unit = '') {
  * Build a text list card for open-ended or nationality fields
  */
 function textListCardHtml(number, title, key) {
+  const hidden = hiddenCard(title);
+  if (hidden) return hidden;
   const answered = countAnswered(key);
   const entries = state.submissions
     .filter(r => r[key] && r[key] !== '–' && r[key] !== null)
@@ -135,7 +169,7 @@ function textListCardHtml(number, title, key) {
   const listHtml = entries.slice(0, 6).map(e => `
     <div class="text-list-item">
       <span class="quote-icon">"</span>
-      <span class="text-list-val">${e.val}</span>
+      <span class="text-list-val">${esc(e.val)}</span>
       <span class="text-list-date">${formatDate(e.date)}</span>
     </div>
   `).join('');
@@ -256,7 +290,22 @@ export function renderSummary() {
   cards.push(q13);
 
   // Assemble HTML
-  container.innerHTML = kpiHtml + cards.map(c => c.html).join('');
+  // A hidden card leaves no trace on the page, so without this the only way back
+  // is clearing browser storage. It lists what is hidden by name and restores in
+  // one click.
+  const hiddenKeys = [...state.hiddenSummaryCards].filter(k => state.hiddenSummaryTitles.has(k));
+  const restoreHtml = hiddenKeys.length ? `
+    <div class="summary-hidden-bar">
+      <span class="summary-hidden-count">${hiddenKeys.length} card${hiddenKeys.length === 1 ? '' : 's'} hidden:</span>
+      ${hiddenKeys.map(k => `
+        <button class="summary-restore-btn" type="button" data-card-key="${k}"
+                title="Show this card again">${esc(state.hiddenSummaryTitles.get(k))} &plus;</button>
+      `).join('')}
+      <button class="summary-restore-all" type="button">Show all</button>
+    </div>
+  ` : '';
+
+  container.innerHTML = kpiHtml + restoreHtml + cards.map(c => c.html).join('');
 
   // ── Render Charts ──────────────────────────────────────────
   // Use Chart.js (loaded via CDN in index.html)

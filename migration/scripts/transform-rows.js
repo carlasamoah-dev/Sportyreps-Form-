@@ -11,6 +11,7 @@
  *
  * Output (both gitignored, they contain personal data):
  *   migration/out/payloads.json     one object per response, keyed by response id
+ *   migration/out/excluded.json     response id -> why it was left out
  *   migration/review_flags.csv      response_id, field, issue, raw value
  *
  * Usage:  SOURCE_CSV=/path/to/responses.csv node migration/scripts/transform-rows.js
@@ -125,6 +126,7 @@ const main = () => {
 
   const payloads = {};
   const skipped = [];
+  const minors = [];
 
   for (const r of data) {
     const id = r[COL.responseId];
@@ -138,11 +140,30 @@ const main = () => {
 
     const trueAge = ageAt(r[COL.dob], r[COL.submitDate]);
     if (trueAge !== null && trueAge < 0) flag(id, 'dob', 'date of birth is after the submission date', clean(r[COL.dob]));
-    if (trueAge !== null && trueAge >= 0 && trueAge < POLICY.minorAgeThreshold) {
+
+    const isMinor = trueAge !== null && trueAge >= 0 && trueAge < POLICY.minorAgeThreshold;
+    if (isMinor) {
       flag(id, 'age', `under ${POLICY.minorAgeThreshold} at submission`, String(trueAge));
       if (POLICY.excludeMinors) {
         skipped.push({ id, reason: `under ${POLICY.minorAgeThreshold} at submission (age ${trueAge})` });
         continue;
+      }
+    }
+
+    // Whether anyone other than the player is named on the record. For an
+    // under-18 this is the difference between a guardian-completed submission
+    // and a child's unaccompanied one, and it cannot be inferred later: the
+    // form does not ask the question directly, it just has these fields.
+    const guardianFields = [
+      r[COL.repFirst], r[COL.repLast], r[COL.repPhone], r[COL.repEmail], r[COL.repCompany],
+      r[COL.viaRepFirst], r[COL.viaRepLast], r[COL.viaRepPhone], r[COL.viaRepEmail], r[COL.viaRepCompany],
+    ];
+    const guardianOnRecord = guardianFields.some(v => clean(v) !== '');
+
+    if (isMinor) {
+      minors.push({ id, age: trueAge, guardian: guardianOnRecord });
+      if (!guardianOnRecord) {
+        flag(id, 'guardian', 'under 18 with no representative or guardian named on the record', '');
       }
     }
 
@@ -185,6 +206,12 @@ const main = () => {
       source_response_id: id,
       source_submitted_at: clean(r[COL.submitDate]) ? clean(r[COL.submitDate]).replace(' ', 'T') + 'Z' : null,
       source_network_id: clean(r[COL.networkId]) || null,
+
+      // Requires sql/004. Recorded for every player, so false means checked and
+      // false rather than never looked at.
+      is_minor_at_submission: isMinor,
+      age_at_submission: trueAge !== null && trueAge >= 0 ? trueAge : null,
+      guardian_on_record: guardianOnRecord,
       response_type: clean(r[COL.responseType]) || null,
       created_at: clean(r[COL.submitDate]) ? clean(r[COL.submitDate]).replace(' ', 'T') + 'Z' : null,
 
@@ -253,11 +280,29 @@ const main = () => {
 
   fs.mkdirSync(PATHS.out, { recursive: true });
   fs.writeFileSync(`${PATHS.out}/payloads.json`, JSON.stringify(payloads, null, 2));
+
+  // Why each absent response is absent. Without this the next step cannot tell a
+  // response left out on purpose from one that failed to transform, and treats a
+  // deliberate policy decision as an unresolved problem.
+  fs.writeFileSync(`${PATHS.out}/excluded.json`,
+    JSON.stringify(Object.fromEntries(skipped.map(s => [s.id, s.reason])), null, 2));
   fs.writeFileSync(PATHS.reviewFlags, toCsv([['response_id', 'field', 'issue', 'raw_value'], ...flags]));
 
   console.log(`payloads      ${Object.keys(payloads).length} responses ready`);
   console.log(`skipped       ${skipped.length}`);
   for (const s of skipped) console.log(`  ${s.id}  ${s.reason}`);
+
+  if (minors.length) {
+    const unaccompanied = minors.filter(m => !m.guardian);
+    console.log(`\nminors        ${minors.length} under ${POLICY.minorAgeThreshold} at submission, being imported and flagged`);
+    for (const m of minors.sort((a, b) => a.age - b.age)) {
+      console.log(`  age ${String(m.age).padStart(2)}  ${m.id}  ${m.guardian ? 'guardian named on the record' : 'NO guardian named on the record'}`);
+    }
+    if (unaccompanied.length) {
+      console.log(`\n  ${unaccompanied.length} of these has no representative or guardian named. The submission may`);
+      console.log('  still have been made by one, but nothing on the record will say so.');
+    }
+  }
   console.log(`review flags  ${flags.length} (see migration/review_flags.csv)`);
 };
 

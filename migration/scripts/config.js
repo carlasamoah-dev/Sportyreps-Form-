@@ -92,10 +92,16 @@ const storagePath = (responseId, slot, ext) => `typeform-2024/${responseId}/${sl
 
 // ── Policy decisions ──────────────────────────────────────────────────────────
 const POLICY = {
-  // The live form ends the journey for under-18s. 12 legacy records are under 18
-  // at submission. Default is to leave them out rather than import data the
-  // current product is designed to refuse. Set to false to import them anyway.
-  excludeMinors: true,
+  // The live form ends the journey for under-18s, and the first pass left the 11
+  // legacy under-18s out on that basis. They are now imported, because those
+  // responses were completed by guardians on the players' behalf, which is a
+  // different situation from a child filling the form in unsupervised.
+  //
+  // Importing them puts a duty on the record rather than removing one, so every
+  // imported row carries is_minor_at_submission, age_at_submission and
+  // guardian_on_record (see sql/004). Set this back to true to leave them out,
+  // and run prune-excluded.js afterwards to take their files out of Storage.
+  excludeMinors: false,
 
   // Age is computed from DOB against submit date, not taken from the self-reported
   // age field, which disagrees with DOB on one row and is absent on others.
