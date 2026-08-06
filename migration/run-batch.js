@@ -172,8 +172,9 @@ const main = async () => {
     stop('The check failed to run. Nothing has been changed.');
   }
 
-  say('\nEvery file matched a player and a slot. Check the list above reads right,');
-  say('particularly that the front and rear photos are the way round you expect.');
+  say('\nCheck the list above reads right, particularly that the front and rear');
+  say('photos are the way round you expect. Any player marked WAIT is set aside');
+  say('for now and can be done later; the rest go through.');
   if (!await confirm('\nGo ahead?')) {
     stop('Stopped. Nothing has been changed.');
   }

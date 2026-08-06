@@ -222,9 +222,21 @@ const resolve = (entry, index) => {
       const known = rows.filter(e => e.original_filename.toLowerCase() === base.toLowerCase()
         || base.toLowerCase().endsWith(e.original_filename.toLowerCase()));
 
+      // The written slot and the export disagree. Whoever named the file was
+      // looking at the photograph; the export only recorded which upload box it
+      // arrived in, and those boxes are demonstrably unreliable in this data.
+      // So with --relaxed the name wins, loudly. Without it the question goes
+      // back to the operator.
       if (known.length && !known.some(e => e.slot === appended)) {
-        return { error: `the name says ${appended}, but the export records '${known[0].original_filename}' as ${known.map(e => e.slot).join(' and ')}. `
-          + `Rename it to '${appended}${path.extname(entry.file)}' to insist on ${appended}, or to '${known[0].slot}${path.extname(entry.file)}' to go with the export` };
+        if (!relaxed) {
+          return { error: `the name says ${appended}, but the export records '${known[0].original_filename}' as ${known.map(e => e.slot).join(' and ')}. `
+            + `Rename it to '${appended}${path.extname(entry.file)}' to insist on ${appended}, or to '${known[0].slot}${path.extname(entry.file)}' to go with the export` };
+        }
+        return {
+          hits: [hit],
+          strength: STRENGTH.named,
+          note: `named ${appended}, export said ${known.map(e => e.slot).join(' and ')}, name wins (--relaxed)`,
+        };
       }
       return {
         hits: [hit],
@@ -404,6 +416,15 @@ const main = () => {
   }
   verified = verified.filter(v => !superseded.has(v) && !contested.has(`${v.response_id}|${v.slot}`));
 
+  // A file can lose every slot it claimed, to a firmer claim or to an identical
+  // copy. That is a deliberate outcome, not an error, but it means bytes on the
+  // disk are not going up and that must not pass silently.
+  const uploaded = new Set(verified.map(v => v.local_path));
+  const held = new Set(quarantined.map(q => q.file));
+  const displaced = [...new Map([...superseded]
+    .filter(r => !uploaded.has(r.local_path) && !held.has(r.local_path))
+    .map(r => [r.local_path, r])).values()];
+
   // 6. Slot completeness per response.
   const touched = [...new Set(verified.map(v => v.response_id))];
   const incomplete = [];
@@ -415,24 +436,46 @@ const main = () => {
   }
 
   // ── Report ──────────────────────────────────────────────────────────────────
-  console.log(`\nBatch ${batchNo}: ${dropped.length} files dropped, ${verified.length} slot assignments verified, ${quarantined.length} quarantined\n`);
+  console.log(`\nBatch ${batchNo}: ${dropped.length} files dropped, ${verified.length} slot assignments verified, `
+    + `${quarantined.length} quarantined${displaced.length ? `, ${displaced.length} not uploaded` : ''}\n`);
   for (const v of verified) {
     console.log(`  OK   ${v.response_id}  ${v.slot.padEnd(8)} ${v.local_path}  ->  ${v.bucket}/${v.storage_path}${v.notes ? '  [' + v.notes + ']' : ''}`);
   }
   for (const q of quarantined) console.log(`  HOLD ${q.file}  ${q.reason}`);
+  for (const d of displaced) console.log(`  DROP ${d.local_path}  another file took ${d.response_id} ${d.slot}; this one is not uploaded`);
   for (const i of incomplete) console.log(`  GAP  ${i.id} missing slot(s): ${i.missing.join(', ')}`);
+
+  // An unresolved file is a problem for the player it belongs to, not for the
+  // other forty-nine. Strict mode still refuses the whole drop, because there a
+  // hold means the operator has not looked yet. Under --relaxed they have, so
+  // the affected players are set aside and the rest go through.
+  const troubled = new Set(incomplete.map(i => i.id));
+  for (const q of quarantined) {
+    const owner = q.file.split(path.sep)[0];
+    if (index.some(e => e.response_id === owner)) troubled.add(owner);
+  }
+  const shippable = relaxed ? verified.filter(v => !troubled.has(v.response_id)) : verified;
+  const readyCount = new Set(shippable.map(v => v.response_id)).size;
+
+  if (relaxed && troubled.size) {
+    console.log(`\n${troubled.size} player(s) set aside until the lines above are settled:`);
+    for (const id of troubled) console.log(`  WAIT ${id}`);
+    console.log(`${readyCount} player(s) ready to go.`);
+  }
+
+  const blocked = relaxed ? !shippable.length : (quarantined.length || incomplete.length);
 
   // Exit 3 rather than 0 when the dry run found something, so a wrapper can tell
   // "checked, all clean" from "checked, needs a human" without parsing the report.
   if (!write) {
-    if (quarantined.length || incomplete.length) {
+    if (blocked) {
       console.log('\nDry run. Resolve the HOLD/GAP lines above, then run this again.');
       process.exit(3);
     }
-    console.log('\nDry run. Re-run with --write to append these rows to manifest.csv.');
+    console.log(`\nDry run. Re-run with --write to record ${shippable.length} rows in manifest.csv.`);
     return;
   }
-  if (quarantined.length || incomplete.length) {
+  if (blocked) {
     console.log('\nRefusing to write: resolve the HOLD/GAP lines above first.');
     process.exit(2);
   }
@@ -441,7 +484,7 @@ const main = () => {
   const existing = fs.existsSync(PATHS.manifest)
     ? parseCsv(fs.readFileSync(PATHS.manifest, 'utf8')).slice(1)
     : [];
-  const rows = verified.map(v => [v.batch, v.response_id, v.slot, v.original_filename, v.local_path, v.sha256, v.bytes, v.mime, v.bucket, v.storage_path, v.status, '', v.notes]);
+  const rows = shippable.map(v => [v.batch, v.response_id, v.slot, v.original_filename, v.local_path, v.sha256, v.bytes, v.mime, v.bucket, v.storage_path, v.status, '', v.notes]);
   fs.writeFileSync(PATHS.manifest, toCsv([header, ...existing, ...rows]));
   console.log(`\nmanifest.csv  +${rows.length} rows`);
 };
