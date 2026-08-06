@@ -94,12 +94,14 @@ const main = async () => {
 
   let done = 0;
   let failed = 0;
+  const reasons = new Map();     // failure message -> how many files hit it
 
   for (const r of todo) {
     const source = resolveSource(r, col);
 
     if (!source) {
       console.log(`  MISS ${r[col.local_path] || r[col.original_filename]} not present in ${dir}`);
+      reasons.set('file not found in the drop folder', (reasons.get('file not found in the drop folder') || 0) + 1);
       failed++;
       continue;
     }
@@ -112,6 +114,7 @@ const main = async () => {
     if (error && !/exists/i.test(error.message)) {
       console.log(`  FAIL ${r[col.storage_path]}  ${error.message}`);
       r[col.notes] = [r[col.notes], error.message].filter(Boolean).join(' | ');
+      reasons.set(error.message, (reasons.get(error.message) || 0) + 1);
       failed++;
       continue;
     }
@@ -125,6 +128,16 @@ const main = async () => {
 
   fs.writeFileSync(PATHS.manifest, toCsv([header, ...rows]));
   console.log(`\nuploaded ${done}, failed ${failed}. manifest.csv updated.`);
+
+  // The individual FAIL lines scroll away on a run this size, and the reason
+  // matters far more than the count: one repeated message is one fix.
+  if (reasons.size) {
+    console.log('\nWhy the failures happened:');
+    for (const [msg, n] of [...reasons.entries()].sort((a, b) => b[1] - a[1])) {
+      console.log(`  ${String(n).padStart(4)} x  ${msg}`);
+    }
+    console.log('\nEvery failure is also written against its row in manifest.csv.');
+  }
   if (failed) process.exit(2);
 };
 

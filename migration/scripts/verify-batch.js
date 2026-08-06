@@ -484,9 +484,39 @@ const main = () => {
   const existing = fs.existsSync(PATHS.manifest)
     ? parseCsv(fs.readFileSync(PATHS.manifest, 'utf8')).slice(1)
     : [];
-  const rows = shippable.map(v => [v.batch, v.response_id, v.slot, v.original_filename, v.local_path, v.sha256, v.bytes, v.mime, v.bucket, v.storage_path, v.status, '', v.notes]);
-  fs.writeFileSync(PATHS.manifest, toCsv([header, ...existing, ...rows]));
-  console.log(`\nmanifest.csv  +${rows.length} rows`);
+
+  // One slot of one response is one row, however many times this is re-run.
+  // Appending blindly is what turned 192 objects into 384 on a second pass.
+  const COL_RESPONSE = 1, COL_SLOT = 2, COL_SHA = 5, COL_STATUS = 10, COL_URL = 11;
+  const byKey = new Map(existing.map(r => [`${r[COL_RESPONSE]}|${r[COL_SLOT]}`, r]));
+
+  let added = 0;
+  let kept = 0;
+  let replaced = 0;
+
+  for (const v of shippable) {
+    const key = `${v.response_id}|${v.slot}`;
+    const prior = byKey.get(key);
+    const row = [v.batch, v.response_id, v.slot, v.original_filename, v.local_path, v.sha256,
+      v.bytes, v.mime, v.bucket, v.storage_path, v.status, '', v.notes];
+
+    // An already-uploaded row for the same bytes is left exactly as it is, so a
+    // re-run never discards a public URL and never re-uploads what is up.
+    if (prior && prior[COL_URL] && prior[COL_SHA] === v.sha256) {
+      kept++;
+      continue;
+    }
+    if (prior) {
+      row[COL_STATUS] = prior[COL_SHA] === v.sha256 ? prior[COL_STATUS] || v.status : v.status;
+      replaced++;
+    } else {
+      added++;
+    }
+    byKey.set(key, row);
+  }
+
+  fs.writeFileSync(PATHS.manifest, toCsv([header, ...byKey.values()]));
+  console.log(`\nmanifest.csv  ${byKey.size} rows total  (${added} new, ${replaced} updated, ${kept} already uploaded)`);
 };
 
 main();
